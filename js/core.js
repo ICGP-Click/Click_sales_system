@@ -28,6 +28,53 @@
             document.getElementById(screenId).classList.remove('hidden');
         }
 
+        // P6: 黑夜模式 — 初始化/切换
+        window.initTheme = function() {
+            const saved = localStorage.getItem('theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const isDark = saved === 'dark' || (!saved && prefersDark);
+            document.documentElement.classList.toggle('dark', isDark);
+            updateThemeIcon();
+        };
+        window.toggleTheme = function() {
+            const isDark = document.documentElement.classList.toggle('dark');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            updateThemeIcon();
+        };
+        function updateThemeIcon() {
+            const btn = document.getElementById('themeToggleBtn');
+            if (btn) btn.textContent = document.documentElement.classList.contains('dark') ? '☀️' : '🌙';
+        }
+        initTheme(); // 立即初始化（core.js 在 body 末尾加载，DOM 已就绪）
+
+        // P12: 功能开关检测 — 默认开启（缺省 = true）
+        window.isFeatureEnabled = function(name) {
+            const config = JSON.parse(imageUrlData['__APP_CONFIG__'] || '{}');
+            return config.features?.[name] !== false;
+        };
+
+        // P15: 应用自定义背景（支持纯色/图片+自动遮罩）
+        window.applyBackground = function() {
+            const config = JSON.parse(imageUrlData['__APP_CONFIG__'] || '{}');
+            const bgType = config.bgType || 'none';
+            const body = document.body;
+            body.style.backgroundImage = '';
+            body.style.backgroundColor = '';
+            body.classList.remove('has-custom-bg');
+
+            if (bgType === 'color' && config.bgColor) {
+                body.style.backgroundColor = config.bgColor;
+            } else if (bgType === 'image' && config.bgUrl) {
+                body.style.backgroundImage = `url(${config.bgUrl})`;
+                body.style.backgroundSize = 'cover';
+                body.style.backgroundPosition = 'center';
+                body.style.backgroundAttachment = 'fixed';
+                body.classList.add('has-custom-bg');
+                const opacity = config.bgOpacity || 0.4;
+                document.documentElement.style.setProperty('--bg-overlay-opacity', opacity);
+            }
+        };
+
         // XSS 防护：转义 HTML 特殊字符
         function escapeHtml(str) {
             if (!str) return '';

@@ -89,7 +89,7 @@
                     groupData = data.group_data || []; imageUrlData = data.image_data || {};
                     document.getElementById('settingQueryKey').value = data.query_key || '';
                 } else { await db.from('leader_data').insert({ user_id: currentUser.id, group_data: [], image_data: {} }); }
-            } catch(e) {} finally { hideLoading(); showScreen('dashboard-screen'); updateBatchDatalist(); switchTab('input'); }
+            } catch(e) {} finally { hideLoading(); showScreen('dashboard-screen'); updateBatchDatalist(); switchTab('input'); if (typeof applyBackground === 'function') applyBackground(); if (typeof applyFeatureToggles === 'function') applyFeatureToggles(); }
         }
 
         // 页面启动时检查是否已登录（放在 auth.js 末尾，确保 initCloudData 已定义）

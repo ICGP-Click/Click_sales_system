@@ -3,7 +3,7 @@
             document.getElementById('page-' + tabId).classList.remove('hidden');
             document.querySelectorAll('[id^="tab-"]').forEach(el => { el.classList.remove('tab-active', 'text-blue-500', 'text-purple-500', 'text-green-600', 'text-yellow-600'); el.classList.add('text-gray-500'); el.style.borderBottom = "none"; el.style.fontWeight = "normal"; });
             let activeTab = document.getElementById('tab-' + tabId);
-            if(tabId === 'cloud') { activeTab.classList.add('tab-active', 'text-purple-500'); activeTab.style.borderBottom = "2px solid #a855f7"; renderCloudSettings(); } 
+            if(tabId === 'cloud') { activeTab.classList.add('tab-active', 'text-purple-500'); activeTab.style.borderBottom = "2px solid #a855f7"; renderCloudSettings(); renderBgConfig(); renderFeatureToggles(); }
             else if(tabId === 'shipping') { activeTab.classList.add('tab-active', 'text-green-600'); activeTab.style.borderBottom = "2px solid #16a34a"; renderShippingAdmin(); }
             else if(tabId === 'payment') { activeTab.classList.add('tab-active', 'text-yellow-600'); activeTab.style.borderBottom = "2px solid #ca8a04"; renderPaymentAdmin(); }
             else { activeTab.classList.add('tab-active', 'text-blue-500'); activeTab.style.borderBottom = "2px solid #3b82f6"; }
