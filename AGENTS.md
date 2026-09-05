@@ -25,7 +25,7 @@
   schema 与 RPC 见 `supabase-schema.sql`（手工在 SQL Editor 执行，无版本化迁移）。
 - QQ 机器人链路：前端 `js/bot.js` → `relay/relay.js`（ECS，校验登录态+owner/admin）→ NapCat（OneBot v11）。
 - 部署：Netlify + GitHub Pages 双通道，`scripts/build-config.js` 从环境变量生成 `js/config.js`（密钥不进仓库）。
-- 样式：Tailwind CDN + `css/styles.css`（黑夜模式 57 条覆盖）；设计规范见 `DESIGN.md`。
+- 样式：Tailwind CDN + `css/styles.css`（黑夜模式 57 条覆盖）；设计规范见 `docs/design/DESIGN.md`。
 
 ## 常用命令
 
@@ -42,6 +42,6 @@
 | `docs/STATUS.md` | 权威状态：已完成阶段、数据模型（blob 结构）、已知限制 |
 | `CLAUDE.md` | QQ 机器人接入专项（NapCat / relay / 安全红线） |
 | `README.md` | 功能、部署、安全、项目结构 |
-| `PRODUCT.md` / `DESIGN.md` | 产品定位 / 视觉设计规范 |
+| `docs/design/PRODUCT.md` / `docs/design/DESIGN.md` | 产品定位 / 视觉设计规范 |
 | `CHANGELOG.md` | 版本变更记录 |
 | `docs/IMPROVEMENT_PLAN.md` | v1.4.0 时期改进计划（历史归档，已并入 ROADMAP） |

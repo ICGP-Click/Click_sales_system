@@ -11,8 +11,8 @@
 | `docs/ROADMAP.md` | **当前路线图**：2026-09 十项问题迭代计划 + P0 团员侧线上故障分析 |
 | `docs/STATUS.md` | 权威状态：已完成阶段、数据模型、已知限制 |
 | `README.md` | 功能、部署、安全、项目结构 |
-| `DESIGN.md` / `DESIGN-claude.md` | 视觉设计规范（后者为 Claude 分析版） |
-| `PRODUCT.md` | 产品定位 |
+| `docs/design/DESIGN.md` / `docs/design/DESIGN-claude.md` | 视觉设计规范（后者为 Claude 分析版） |
+| `docs/design/PRODUCT.md` | 产品定位 |
 | `docs/IMPROVEMENT_PLAN.md` | v1.4.0 时期改进计划（历史归档） |
 
 ## 本次交接重点：QQ 机器人接入
