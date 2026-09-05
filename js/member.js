@@ -151,7 +151,11 @@ Aoi.member.renderOrders = function (cn) {
   var rows = d.orders.filter(function (o) { return o.buyer === cn; });
   var tbody = document.getElementById('memberOrderTbody');
   tbody.innerHTML = rows.length ? rows.map(function (o, i) {
-    var sum = o.price * o.count;
+    var sum = (o.price != null) ? o.price * o.count : 0;
+    var priceCell = (o.price != null) ? '¥' + o.price.toFixed(2) : '<span class="text-amber-500">待生成</span>';
+    if (o.currency && o.currency !== 'cny' && o.priceOrig != null) {
+      priceCell += '<br><span class="text-xs text-gray-400">' + Aoi.orders.origText(o) + '</span>';
+    }
     var shipped = (o.shipped || '未发') === '已发';
     var confirm;
     if (shipped && !o.received) {
@@ -166,9 +170,9 @@ Aoi.member.renderOrders = function (cn) {
       + '<td class="px-2 py-2 text-right text-gray-400 select-none">' + (i + 1) + '</td>'
       + '<td class="px-3 py-2">' + Aoi.escapeHtml(o.activity) + '</td>'
       + '<td class="px-3 py-2">' + Aoi.escapeHtml(o.type + ' - ' + o.model) + '</td>'
-      + '<td class="px-3 py-2 text-right">' + o.price.toFixed(2) + '</td>'
+      + '<td class="px-3 py-2 text-right">' + priceCell + '</td>'
       + '<td class="px-3 py-2 text-right">' + o.count + '</td>'
-      + '<td class="px-3 py-2 text-right">' + sum.toFixed(2) + '</td>'
+      + '<td class="px-3 py-2 text-right">' + ((o.price != null) ? sum.toFixed(2) : '—') + '</td>'
       + '<td class="px-3 py-2">' + Aoi.escapeHtml(o.batchId ? Aoi.orders.batchDate(o.batchId) : '—') + '</td>'
       + '<td class="px-3 py-2">' + Aoi.escapeHtml(tracking) + '</td>'
       + '<td class="px-3 py-2">' + confirm + '</td>'

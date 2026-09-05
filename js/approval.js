@@ -27,7 +27,7 @@ Aoi.approval.buyerSummary = function (batchId) {
   d.orders.forEach(function (o) {
     if (o.batchId !== batchId) return;
     if (!map[o.buyer]) map[o.buyer] = { buyer: o.buyer, goods: 0 };
-    map[o.buyer].goods += o.price * o.count;
+    map[o.buyer].goods += (o.price != null) ? o.price * o.count : 0;
   });
   return Object.keys(map).map(function (buyer) {
     var m = map[buyer];

@@ -390,20 +390,30 @@
                   <input id="oTypeSearch" type="text" placeholder="搜索类型…" oninput="Aoi.orders.filterTypePanel('oType')" class="flex-1 border border-gray-200 rounded px-2 py-1 text-sm">
                   <button onclick="Aoi.orders.closeTypePanel('oType')" class="text-gray-400 hover:text-gray-600 text-xl leading-none px-1">×</button>
                 </div>
+                <div class="flex items-center gap-1 p-2 border-b border-gray-100">
+                  <input id="oTypeNewName" type="text" placeholder="快捷新建类型" class="flex-1 border border-gray-200 rounded px-2 py-1 text-sm">
+                  <select id="oTypeNewRoute" class="border border-gray-200 rounded px-1 py-1 text-xs"></select>
+                  <button onclick="Aoi.orders.quickAddType('oType')" class="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600">新建</button>
+                </div>
                 <div id="oTypeList" class="max-h-64 overflow-y-auto p-2"></div>
               </div>
             </div>
             <input id="oModel" placeholder="型号（如 电次）" class="border border-gray-300 rounded px-3 py-2 text-sm">
-            <select id="oCurrency" onchange="Aoi.orders.previewRmb('oPrice','oCurrency','oPricePreview')" class="border border-gray-300 rounded px-3 py-2 text-sm">
+            <select id="oCurrency" onchange="Aoi.orders.onEntryCurrencyChange()" class="border border-gray-300 rounded px-3 py-2 text-sm">
               <option value="cny">人民币</option>
               <option value="jpy">日元</option>
               <option value="krw">韩元</option>
             </select>
-            <input id="oPrice" type="number" step="0.01" placeholder="价格" oninput="Aoi.orders.previewRmb('oPrice','oCurrency','oPricePreview')" class="border border-gray-300 rounded px-3 py-2 text-sm">
+            <input id="oPrice" type="number" step="0.01" placeholder="价格（人民币）" oninput="Aoi.orders.previewEntry()" class="border border-gray-300 rounded px-3 py-2 text-sm">
             <input id="oCount" type="number" step="1" placeholder="数量" class="border border-gray-300 rounded px-3 py-2 text-sm">
-            <input id="oBuyer" placeholder="购买者" class="border border-gray-300 rounded px-3 py-2 text-sm">
+            <textarea id="oBuyer" rows="2" placeholder="购买者（每行一个用户，可批量导入）" class="border border-gray-300 rounded px-3 py-2 text-sm md:col-span-2"></textarea>
           </div>
-          <p class="mt-2 text-xs text-gray-500">价格预览 <span id="oPricePreview" class="font-semibold text-gray-700"></span>（非人民币按计算器公式转人民币保存）</p>
+          <div id="oPriceModes" class="hidden mt-2 flex flex-wrap items-center gap-4 text-sm">
+            <label class="flex items-center gap-1"><input type="radio" name="oPriceMode" value="direct" onchange="Aoi.orders.onEntryModeChange()"> 直接输入外币价（人民币留空）</label>
+            <label class="flex items-center gap-1"><input type="radio" name="oPriceMode" value="calc" checked onchange="Aoi.orders.onEntryModeChange()"> 计算器计算</label>
+            <span id="oPriceRmbWrap" class="flex items-center gap-2">人民币价格 <input id="oPriceRmb" type="number" step="0.01" oninput="Aoi.orders.previewEntry()" class="w-28 border border-gray-300 rounded px-2 py-1 text-sm"></span>
+          </div>
+          <p class="mt-2 text-xs text-gray-500">价格预览 <span id="oPricePreview" class="font-semibold text-gray-700"></span><span class="text-gray-400">（非人民币不再自动转换；人民币价可在「订单管理 → 批量生成人民币价」统一生成）</span></p>
           <button onclick="Aoi.orders.addManual()" class="mt-3 px-5 py-2 bg-blue-500 text-white font-bold rounded hover:bg-blue-600">添加订单</button>
         </div>
 
@@ -417,6 +427,11 @@
                 <div class="flex items-center gap-2 p-2 border-b border-gray-100">
                   <input id="pTypeSearch" type="text" placeholder="搜索类型…" oninput="Aoi.orders.filterTypePanel('pType')" class="flex-1 border border-gray-200 rounded px-2 py-1 text-sm">
                   <button onclick="Aoi.orders.closeTypePanel('pType')" class="text-gray-400 hover:text-gray-600 text-xl leading-none px-1">×</button>
+                </div>
+                <div class="flex items-center gap-1 p-2 border-b border-gray-100">
+                  <input id="pTypeNewName" type="text" placeholder="快捷新建类型" class="flex-1 border border-gray-200 rounded px-2 py-1 text-sm">
+                  <select id="pTypeNewRoute" class="border border-gray-200 rounded px-1 py-1 text-xs"></select>
+                  <button onclick="Aoi.orders.quickAddType('pType')" class="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600">新建</button>
                 </div>
                 <div id="pTypeList" class="max-h-64 overflow-y-auto p-2"></div>
               </div>
@@ -455,7 +470,22 @@
           <input id="arriveDate" type="date" class="hidden border border-gray-300 rounded px-3 py-2 text-sm">
           <button onclick="Aoi.orders.markArrived()" class="px-4 py-2 bg-green-600 text-white text-sm font-bold rounded hover:bg-green-700">标记到货</button>
           <button onclick="Aoi.orders.markUnarrived()" class="px-4 py-2 bg-gray-800 text-white text-sm font-bold rounded hover:bg-gray-900">设为未到货</button>
+          <button onclick="Aoi.orders.showGenRmb()" class="px-4 py-2 bg-blue-500 text-white text-sm font-bold rounded hover:bg-blue-600">批量生成人民币价</button>
           <button onclick="Aoi.orders.batchDelete()" class="px-4 py-2 bg-red-500 text-white text-sm font-bold rounded hover:bg-red-600">批量删除</button>
+        </div>
+        <div id="genRmbBox" class="hidden flex flex-wrap items-center gap-3 mb-4 border border-blue-200 bg-blue-50 dark:bg-gray-800 rounded-lg p-3">
+          <span class="text-sm font-semibold">公式：人民币 = 外币原价 × (</span>
+          <select id="genCurrency" onchange="Aoi.orders.onGenCurrencyChange()" class="border border-gray-300 rounded px-2 py-1 text-sm">
+            <option value="jpy">日元</option>
+            <option value="krw">韩元</option>
+          </select>
+          <span class="text-sm">汇率</span>
+          <input id="genRate" type="number" step="0.0001" class="w-24 border border-gray-300 rounded px-2 py-1 text-sm">
+          <span class="text-sm">+ 加价</span>
+          <input id="genMarkup" type="number" step="0.0001" class="w-20 border border-gray-300 rounded px-2 py-1 text-sm">
+          <span class="text-sm">) × 0.5 圆整</span>
+          <button onclick="Aoi.orders.applyGenRmb()" class="px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded hover:bg-blue-700">生成</button>
+          <button onclick="Aoi.orders.hideGenRmb()" class="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-bold rounded hover:bg-gray-300">取消</button>
         </div>
         <div class="overflow-x-auto">
           <table id="orderTable" class="w-full text-sm data-table">
@@ -463,11 +493,37 @@
               <th class="px-2 py-2 text-right w-8">行号</th>
               <th class="px-2 py-2"></th>
               <th class="px-3 py-2">活动</th><th class="px-3 py-2">制品类型</th><th class="px-3 py-2">型号</th>
-              <th class="px-3 py-2 text-right">单价</th><th class="px-3 py-2 text-right">数量</th>
-              <th class="px-3 py-2">购买者</th><th class="px-3 py-2">到货状态</th><th class="px-3 py-2">到货批次</th><th class="px-3 py-2 text-right">小计</th>
+              <th class="px-3 py-2 text-right">单价(¥)</th><th class="px-3 py-2 text-right">外币原价</th><th class="px-3 py-2 text-right">数量</th>
+              <th class="px-3 py-2">购买者</th><th class="px-3 py-2">备注</th><th class="px-3 py-2">到货状态</th><th class="px-3 py-2">到货批次</th><th class="px-3 py-2 text-right">小计</th>
+              <th class="px-3 py-2"></th>
             </tr></thead>
             <tbody id="orderTbody"></tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- 订单编辑弹窗 -->
+      <div id="orderEditModal" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md p-6" onclick="event.stopPropagation()">
+          <h3 class="font-bold mb-3">编辑订单</h3>
+          <div class="grid grid-cols-2 gap-3">
+            <input id="eActivity" type="text" placeholder="活动" class="col-span-2 border border-gray-300 rounded px-3 py-2 text-sm">
+            <input id="eType" type="text" placeholder="制品类型" class="border border-gray-300 rounded px-3 py-2 text-sm">
+            <input id="eModel" type="text" placeholder="型号" class="border border-gray-300 rounded px-3 py-2 text-sm">
+            <input id="eCount" type="number" step="1" placeholder="数量" class="border border-gray-300 rounded px-3 py-2 text-sm">
+            <select id="eCurrency" class="border border-gray-300 rounded px-3 py-2 text-sm">
+              <option value="cny">人民币</option>
+              <option value="jpy">日元</option>
+              <option value="krw">韩元</option>
+            </select>
+            <input id="ePriceOrig" type="number" step="0.01" placeholder="外币原价（选填）" class="border border-gray-300 rounded px-3 py-2 text-sm">
+            <input id="ePrice" type="number" step="0.01" placeholder="人民币单价（留空=待生成）" class="border border-gray-300 rounded px-3 py-2 text-sm">
+            <textarea id="eRemark" rows="2" placeholder="备注" class="col-span-2 border border-gray-300 rounded px-3 py-2 text-sm"></textarea>
+          </div>
+          <div class="flex justify-end gap-3 mt-4">
+            <button onclick="Aoi.orders.closeEdit()" class="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-bold rounded hover:bg-gray-300">取消</button>
+            <button onclick="Aoi.orders.saveEdit()" class="px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded hover:bg-blue-700">保存</button>
+          </div>
         </div>
       </div>
 

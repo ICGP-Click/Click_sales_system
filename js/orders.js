@@ -19,6 +19,11 @@ Aoi.orders.ensure = function () {
   if (!d.addresses) d.addresses = {};
   if (!d.memberMeta) d.memberMeta = {};
   if (!Array.isArray(d.cnChanges)) d.cnChanges = [];
+  // v1.8.0 迁移：外币原价 / 币种 / 备注（旧数据视为人民币已换算）
+  d.orders.forEach(function (o) {
+    if (o.currency == null) o.currency = 'cny';
+    if (o.remark == null) o.remark = '';
+  });
   // 首次迁移：把内置常用类型并入类型库（线路=未分类）
   Aoi.orders.TYPE_SUGGESTIONS.forEach(function (t) {
     if (!d.typeMeta[t]) d.typeMeta[t] = { route: '未分类' };
@@ -98,32 +103,93 @@ Aoi.orders.cancelImport = function () {
 
 // —— 手动录入 ——
 
-// 实时预览人民币价格（货币≠人民币时）
-Aoi.orders.previewRmb = function (priceId, currencyId, outId) {
-  var price = parseFloat(document.getElementById(priceId).value);
-  var currency = document.getElementById(currencyId).value;
-  var out = document.getElementById(outId);
-  if (!out) return;
-  if (isNaN(price)) { out.textContent = ''; return; }
-  out.textContent = '= ¥' + Aoi.calc.toRmb(price, currency).toFixed(2);
+// 录入页：币种变化 → 切换人民币/外币两种录入形态（v1.8.0 取消自动转换）
+Aoi.orders.onEntryCurrencyChange = function () {
+  var currency = document.getElementById('oCurrency').value;
+  var foreign = currency !== 'cny';
+  ['oPriceModes', 'oPriceRmbWrap'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.classList.toggle('hidden', !foreign);
+  });
+  var price = document.getElementById('oPrice');
+  if (price) price.placeholder = foreign ? '外币价格' : '价格（人民币）';
+  if (!foreign) {
+    var rmb = document.getElementById('oPriceRmb');
+    if (rmb) rmb.value = '';
+    var prev = document.getElementById('oPricePreview');
+    if (prev) prev.textContent = '';
+  }
+  Aoi.orders.previewEntry();
 };
 
-// 手动新增订单（价格统一转为人民币保存）
-Aoi.orders.addManual = async function () {
-  var get = function (id) { return document.getElementById(id).value.trim(); };
-  var ip = get('oIp'), activity = get('oActivity'), type = get('oType'),
-      model = get('oModel'), buyer = get('oBuyer');
-  var currency = document.getElementById('oCurrency').value;
-  var price = parseFloat(get('oPrice'));
-  var count = parseInt(get('oCount'), 10);
-  if (!type || !model || !buyer || isNaN(price) || isNaN(count) || count <= 0) {
-    Aoi.toast('请填写制品类型、型号、价格、数量、购买者', 'warning'); return;
+// 录入页：外币模式下切换「直接输入」/「计算器计算」（计算器模式实时回填人民币价，可再改）
+Aoi.orders.onEntryModeChange = function () {
+  var mode = (document.querySelector('input[name="oPriceMode"]:checked') || {}).value;
+  var rmb = document.getElementById('oPriceRmb');
+  if (rmb && mode === 'calc') {
+    var price = parseFloat(document.getElementById('oPrice').value);
+    var currency = document.getElementById('oCurrency').value;
+    rmb.value = isNaN(price) ? '' : Aoi.calc.toRmb(price, currency).toFixed(2);
   }
+  Aoi.orders.previewEntry();
+};
+
+// 录入页：实时预览（非人民币显示两种模式的说明）
+Aoi.orders.previewEntry = function () {
+  var out = document.getElementById('oPricePreview');
+  if (!out) return;
+  var price = parseFloat(document.getElementById('oPrice').value);
+  var currency = document.getElementById('oCurrency').value;
+  if (currency === 'cny' || isNaN(price)) { out.textContent = ''; return; }
+  var mode = (document.querySelector('input[name="oPriceMode"]:checked') || {}).value;
+  var rmbEl = document.getElementById('oPriceRmb');
+  var rmb = (rmbEl && rmbEl.value !== '') ? parseFloat(rmbEl.value) : Aoi.calc.toRmb(price, currency);
+  out.textContent = mode === 'direct'
+    ? '原币 ' + price + '（人民币价留空，稍后在订单管理批量生成）'
+    : '原币 ' + price + ' = ¥' + (isNaN(rmb) ? '?' : rmb.toFixed(2));
+};
+
+// 录入价格解析：返回 { price(人民币价，null=待生成), priceOrig(外币原价) }
+Aoi.orders.parseEntryOrder = function (currency, mode, priceForeign, priceRmb) {
+  if (currency === 'cny') return { price: priceForeign, priceOrig: null };
+  if (mode === 'direct') return { price: null, priceOrig: priceForeign };
+  return { price: (priceRmb != null ? priceRmb : Aoi.calc.toRmb(priceForeign, currency)), priceOrig: priceForeign };
+};
+
+// 手动新增订单（v1.8.0）：
+//  - 购买者 textarea 多行 = 多位用户，同款订单批量生成
+//  - 取消录入时自动转换；非人民币两种模式：直接输入外币价（人民币留空）/
+//    计算器计算（外币原价 + 人民币价同时入库，人民币可手改）
+Aoi.orders.addManual = async function () {
+  var get = function (id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  var ip = get('oIp'), activity = get('oActivity'), type = get('oType'),
+      model = get('oModel');
+  var currency = document.getElementById('oCurrency').value;
+  var modeEl = document.querySelector('input[name="oPriceMode"]:checked');
+  var mode = modeEl ? modeEl.value : 'calc';
+  var priceForeign = parseFloat(get('oPrice'));
+  var rmbRaw = get('oPriceRmb');
+  var priceRmb = rmbRaw === '' ? null : parseFloat(rmbRaw);
+  var count = parseInt(get('oCount'), 10);
+  var buyers = get('oBuyer').split(/\r?\n+/).map(function (s) { return s.trim(); }).filter(Boolean);
+
+  if (!type || !model || isNaN(count) || count <= 0 || !buyers.length) {
+    Aoi.toast('请填写制品类型、型号、数量、购买者（每行一个）', 'warning'); return;
+  }
+  if (isNaN(priceForeign)) { Aoi.toast('请填写价格', 'warning'); return; }
+  if (currency !== 'cny' && mode === 'calc' && priceRmb != null && isNaN(priceRmb)) {
+    Aoi.toast('人民币价格格式不正确', 'warning'); return;
+  }
+  var prices = Aoi.orders.parseEntryOrder(currency, mode, priceForeign, priceRmb);
+
   var d = Aoi.orders.ensure();
-  d.orders.push({
-    id: Aoi.genId(), ip: ip, activity: activity, type: type, model: model,
-    price: Aoi.calc.toRmb(price, currency), count: count, buyer: buyer,
-    status: '未到货', batchId: null, paid: '未交'
+  buyers.forEach(function (buyer) {
+    d.orders.push({
+      id: Aoi.genId(), ip: ip, activity: activity, type: type, model: model,
+      price: prices.price, priceOrig: prices.priceOrig, currency: currency,
+      count: count, buyer: buyer, remark: '',
+      status: '未到货', batchId: null, paid: '未交'
+    });
   });
   if (activity && d.activities.indexOf(activity) < 0) d.activities.push(activity);
   if (ip && d.ips.indexOf(ip) < 0) d.ips.push(ip);
@@ -134,7 +200,7 @@ Aoi.orders.addManual = async function () {
   await Aoi.saveTeamData(d);
   Aoi.orders.render();
   Aoi.orders.refillDatalists();
-  Aoi.toast('已新增订单', 'success');
+  Aoi.toast('已为 ' + buyers.length + ' 位购买者新增订单' + (prices.price == null ? '（人民币价待批量生成）' : ''), 'success');
 };
 
 // 手动新增周边（预建商品，价格统一转为人民币）
@@ -318,7 +384,24 @@ Aoi.orders.statusBadge = function (status) {
   return '<span class="' + cls + '">' + Aoi.escapeHtml(s) + '</span>';
 };
 
-// 渲染订单表 + 筛选 + 勾选
+// 人民币价显示：未生成（null）时显示占位（v1.8.0 直输外币模式允许人民币价留空）
+Aoi.orders.priceText = function (o) {
+  return o.price == null ? '<span class="text-amber-500">待生成</span>' : o.price.toFixed(2);
+};
+
+// 外币原价显示（人民币单显示 —）
+Aoi.orders.origText = function (o) {
+  if (o.currency === 'cny' || o.priceOrig == null) return '—';
+  var sym = o.currency === 'jpy' ? 'JP¥' : (o.currency === 'krw' ? '₩' : o.currency);
+  return sym + o.priceOrig;
+};
+
+// 备注：点击展开/收起（默认 2 行折叠）
+Aoi.orders.toggleRemark = function (el) {
+  el.classList.toggle('expanded');
+};
+
+// 渲染订单表 + 筛选 + 勾选（v1.8.0：外币原价/备注/编辑列，长文本换行 + 折叠）
 Aoi.orders.render = function () {
   var d = Aoi.orders.ensure();
   Aoi.orders.refillActivities();
@@ -336,27 +419,144 @@ Aoi.orders.render = function () {
   });
 
   var tbody = document.getElementById('orderTbody');
-  var total = 0;
+  var total = 0, pending = 0;
   tbody.innerHTML = rows.map(function (o, i) {
-    var sum = o.price * o.count;
-    total += sum;
-    return '<tr class="border-b border-gray-100 hover:bg-gray-50">'
+    var sum = (o.price != null) ? o.price * o.count : 0;
+    if (o.price != null) total += sum; else pending++;
+    return '<tr class="border-b border-gray-100 hover:bg-gray-50 align-top">'
       + '<td class="px-2 py-2 text-right text-gray-400 select-none">' + (i + 1) + '</td>'
       + '<td class="px-2 py-2"><input type="checkbox" class="row-check" data-id="' + o.id + '"></td>'
-      + '<td class="px-3 py-2">' + Aoi.escapeHtml(o.activity) + '</td>'
-      + '<td class="px-3 py-2">' + Aoi.escapeHtml(o.type) + '</td>'
-      + '<td class="px-3 py-2">' + Aoi.escapeHtml(o.model) + '</td>'
-      + '<td class="px-3 py-2 text-right">' + o.price.toFixed(2) + '</td>'
+      + '<td class="px-3 py-2 wrap">' + Aoi.escapeHtml(o.activity || '—') + '</td>'
+      + '<td class="px-3 py-2 wrap">' + Aoi.escapeHtml(o.type) + '</td>'
+      + '<td class="px-3 py-2 wrap">' + Aoi.escapeHtml(o.model) + '</td>'
+      + '<td class="px-3 py-2 text-right wrap">' + Aoi.orders.priceText(o) + '</td>'
+      + '<td class="px-3 py-2 text-right whitespace-nowrap">' + Aoi.orders.origText(o) + '</td>'
       + '<td class="px-3 py-2 text-right">' + o.count + '</td>'
-      + '<td class="px-3 py-2">' + Aoi.escapeHtml(o.buyer) + '</td>'
+      + '<td class="px-3 py-2 wrap">' + Aoi.escapeHtml(o.buyer) + '</td>'
+      + '<td class="px-3 py-2"><div class="remark-cell" title="点击展开/收起" onclick="Aoi.orders.toggleRemark(this)">' + Aoi.escapeHtml(o.remark || '—') + '</div></td>'
       + '<td class="px-3 py-2">' + Aoi.orders.statusBadge(o.status) + '</td>'
       + '<td class="px-3 py-2">' + Aoi.escapeHtml(o.batchId ? Aoi.orders.batchDate(o.batchId) : '—') + '</td>'
-      + '<td class="px-3 py-2 text-right">' + sum.toFixed(2) + '</td>'
+      + '<td class="px-3 py-2 text-right wrap">' + (o.price != null ? sum.toFixed(2) : '—') + '</td>'
+      + '<td class="px-3 py-2"><button data-edit="' + o.id + '" class="text-blue-600 hover:underline text-xs whitespace-nowrap">编辑</button></td>'
       + '</tr>';
   }).join('');
 
   var stat = document.getElementById('orderStat');
-  if (stat) stat.textContent = '共 ' + rows.length + ' 条，合计 ¥' + total.toFixed(2);
+  if (stat) stat.textContent = '共 ' + rows.length + ' 条，合计 ¥' + total.toFixed(2) + (pending ? '（' + pending + ' 条人民币价待生成）' : '');
+};
+
+// —— 批量生成人民币价（v1.8.0：替代录入时自动转换，与批量删除同排）——
+
+Aoi.orders.showGenRmb = function () {
+  var ids = Aoi.orders.selectedIds();
+  if (!ids.length) { Aoi.toast('请先勾选订单', 'warning'); return; }
+  var box = document.getElementById('genRmbBox');
+  if (!box) return;
+  // 预填汇率：取勾选订单中最常见的外币币种
+  var d = Aoi.orders.ensure();
+  var idSet = {};
+  ids.forEach(function (id) { idSet[id] = 1; });
+  var counter = {};
+  d.orders.forEach(function (o) {
+    if (idSet[o.id] && o.currency && o.currency !== 'cny') counter[o.currency] = (counter[o.currency] || 0) + 1;
+  });
+  var best = null, bestN = 0;
+  Object.keys(counter).forEach(function (c) { if (counter[c] > bestN) { best = c; bestN = counter[c]; } });
+  if (!best) Aoi.toast('勾选中没有外币订单，生成不会改动任何订单', 'info');
+  document.getElementById('genCurrency').value = best || 'jpy';
+  Aoi.orders.onGenCurrencyChange();
+  box.classList.remove('hidden');
+};
+
+// 币种切换 → 回填计算器配置的汇率/加价（可在此基础上修改）
+Aoi.orders.onGenCurrencyChange = function () {
+  var cfg = Aoi.calc.get()[document.getElementById('genCurrency').value];
+  if (!cfg) return;
+  document.getElementById('genRate').value = cfg.rate;
+  document.getElementById('genMarkup').value = cfg.markup;
+};
+
+Aoi.orders.hideGenRmb = function () {
+  var box = document.getElementById('genRmbBox');
+  if (box) box.classList.add('hidden');
+};
+
+Aoi.orders.applyGenRmb = async function () {
+  var ids = Aoi.orders.selectedIds();
+  if (!ids.length) { Aoi.toast('请先勾选订单', 'warning'); return; }
+  var rate = parseFloat(document.getElementById('genRate').value);
+  var markup = parseFloat(document.getElementById('genMarkup').value) || 0;
+  if (isNaN(rate) || rate <= 0) { Aoi.toast('请填写汇率', 'warning'); return; }
+  var idSet = {};
+  ids.forEach(function (id) { idSet[id] = 1; });
+  var d = Aoi.orders.ensure();
+  var n = 0;
+  Aoi.undo.arm('批量生成人民币价', d);
+  d.orders.forEach(function (o) {
+    if (!idSet[o.id] || o.currency === 'cny' || o.priceOrig == null) return;
+    o.price = Aoi.calc.convert(o.priceOrig, rate, markup);
+    n++;
+  });
+  await Aoi.saveTeamData(d);
+  Aoi.orders.render();
+  Aoi.orders.hideGenRmb();
+  Aoi.toast(n ? ('已为 ' + n + ' 条订单生成人民币价（30 秒内可撤销）') : '没有可生成的订单（需含外币原价）', n ? 'success' : 'warning');
+};
+
+// —— 订单编辑（v1.8.0）——
+
+Aoi.orders.editingId = null;
+
+Aoi.orders.openEdit = function (id) {
+  var d = Aoi.orders.ensure();
+  var o = null;
+  d.orders.forEach(function (x) { if (x.id === id) o = x; });
+  if (!o) return;
+  Aoi.orders.editingId = id;
+  var set = function (elId, v) { var el = document.getElementById(elId); if (el) el.value = v; };
+  set('eActivity', o.activity || '');
+  set('eType', o.type);
+  set('eModel', o.model);
+  set('eCount', o.count);
+  set('eCurrency', o.currency || 'cny');
+  set('ePriceOrig', o.priceOrig != null ? o.priceOrig : '');
+  set('ePrice', o.price != null ? o.price : '');
+  set('eRemark', o.remark || '');
+  var modal = document.getElementById('orderEditModal');
+  if (modal) modal.classList.remove('hidden');
+};
+
+Aoi.orders.closeEdit = function () {
+  var modal = document.getElementById('orderEditModal');
+  if (modal) modal.classList.add('hidden');
+  Aoi.orders.editingId = null;
+};
+
+Aoi.orders.saveEdit = async function () {
+  var d = Aoi.orders.ensure();
+  var o = null;
+  d.orders.forEach(function (x) { if (x.id === Aoi.orders.editingId) o = x; });
+  if (!o) { Aoi.orders.closeEdit(); return; }
+  var get = function (id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  var type = get('eType'), model = get('eModel');
+  var count = parseInt(get('eCount'), 10);
+  if (!type || !model || isNaN(count) || count <= 0) { Aoi.toast('类型/型号/数量必填', 'warning'); return; }
+  var priceRaw = get('ePrice');
+  var origRaw = get('ePriceOrig');
+  o.type = type;
+  o.model = model;
+  o.count = count;
+  o.activity = get('eActivity');
+  o.remark = get('eRemark');
+  o.currency = get('eCurrency') || 'cny';
+  o.price = priceRaw === '' ? null : parseFloat(priceRaw);
+  if (o.price != null && isNaN(o.price)) { Aoi.toast('人民币价格格式不正确', 'warning'); return; }
+  o.priceOrig = origRaw === '' ? null : parseFloat(origRaw);
+  if (o.priceOrig != null && isNaN(o.priceOrig)) { Aoi.toast('外币原价格式不正确', 'warning'); return; }
+  await Aoi.saveTeamData(d);
+  Aoi.orders.closeEdit();
+  Aoi.orders.render();
+  Aoi.toast('订单已更新', 'success');
 };
 
 // —— 批量操作 ——
@@ -716,6 +916,12 @@ document.getElementById('buyerTbody').addEventListener('click', function (e) {
   if (btn) Aoi.orders.removeBuyer(btn.getAttribute('data-del-buyer'));
 });
 
+// 事件委托：订单行「编辑」按钮
+document.getElementById('orderTbody').addEventListener('click', function (e) {
+  var btn = e.target.closest('button[data-edit]');
+  if (btn) Aoi.orders.openEdit(btn.getAttribute('data-edit'));
+});
+
 // —— 分级选择：IP → 活动（按 IP 过滤）、类型（线路分组 + 搜索） ——
 
 Aoi.orders.ROUTES = ['常规二次元线路', '一般线路发送', '大件类', '名贵类', '未分类'];
@@ -779,6 +985,8 @@ Aoi.orders.toggleTypePanel = function (typeId) {
   if (!panel) return;
   if (!panel.classList.contains('hidden')) { Aoi.orders.closeTypePanel(typeId); return; }
   ['oType', 'pType'].forEach(function (id) { if (id !== typeId) Aoi.orders.closeTypePanel(id); });
+  var routeSel = document.getElementById(typeId + 'NewRoute');
+  if (routeSel && !routeSel.options.length) routeSel.innerHTML = Aoi.orders.routeOptions();
   Aoi.orders.renderTypePanel(typeId);
   panel.classList.remove('hidden');
 };
@@ -931,6 +1139,25 @@ Aoi.orders.addType = async function () {
   nameEl.value = '';
   Aoi.orders.renderTypes();
   Aoi.toast('已新增类型 ' + name, 'success');
+};
+
+// 类型面板内快捷新建：输入名称 + 选线路，即建即选（v1.8.0）
+Aoi.orders.quickAddType = async function (typeId) {
+  var nameEl = document.getElementById(typeId + 'NewName');
+  var routeEl = document.getElementById(typeId + 'NewRoute');
+  var name = nameEl ? nameEl.value.trim() : '';
+  if (!name) { Aoi.toast('请输入类型名称', 'warning'); return; }
+  var d = Aoi.orders.ensure();
+  if (!d.typeMeta[name]) {
+    d.typeMeta[name] = { route: routeEl ? routeEl.value : '未分类' };
+    await Aoi.saveTeamData(d);
+    Aoi.orders.renderTypes();
+  }
+  var input = document.getElementById(typeId);
+  if (input) input.value = name;
+  if (nameEl) nameEl.value = '';
+  Aoi.orders.closeTypePanel(typeId);
+  Aoi.toast('已新建类型 ' + name, 'success');
 };
 
 Aoi.orders.removeType = async function (name) {
