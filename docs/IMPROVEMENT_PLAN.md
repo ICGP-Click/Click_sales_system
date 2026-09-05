@@ -4,6 +4,9 @@
 > **版本**: v1.4.0
 > **仓库**: [zhengdaode/Aoi-system](https://github.com/zhengdaode/Aoi-system)（独立仓库，已从 mossasari fork 分离）
 
+> ⚠️ **2026-09 归档说明**：本计划为 v1.4.0 时期路线，后续任务已并入 **[docs/ROADMAP.md](ROADMAP.md)**
+> （2026-09 用户实测 10 项问题的迭代计划，含 P0 团员侧线上故障分析）。本文件仅作历史归档，请勿在此追加新任务。
+
 ---
 
 ## 🧭 项目方向
