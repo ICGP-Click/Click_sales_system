@@ -148,6 +148,27 @@ describe('Aoi.orders 订单管理：渲染 / 批量生成 / 编辑（v1.8.0）',
   });
 });
 
+describe('Aoi.orders.previewRmb 回归（迭代1：周边表单引用曾被误删）', () => {
+  beforeEach(() => {
+    aoi.state.data = { calc: { jpyRate: 0.05, jpyMarkup: 0.01 } };
+  });
+
+  it('周边表单引用的 previewRmb 存在且写入预览元素', () => {
+    expect(typeof aoi.orders.previewRmb).toBe('function');
+    setValue('pPrice', '100');
+    doc.getElementById('pCurrency').value = 'jpy';
+    aoi.orders.previewRmb('pPrice', 'pCurrency', 'pPricePreview');
+    // 100 × 0.06 = 6
+    expect(doc.getElementById('pPricePreview').textContent).toBe('= ¥6.00');
+  });
+
+  it('空输入时预览清空、不报错', () => {
+    setValue('pPrice', '');
+    expect(() => aoi.orders.previewRmb('pPrice', 'pCurrency', 'pPricePreview')).not.toThrow();
+    expect(doc.getElementById('pPricePreview').textContent).toBe('');
+  });
+});
+
 describe('Aoi.orders.quickAddType 类型面板快捷新建（v1.8.0）', () => {
   beforeEach(() => {
     stubSave();

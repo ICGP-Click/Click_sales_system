@@ -103,6 +103,16 @@ Aoi.orders.cancelImport = function () {
 
 // —— 手动录入 ——
 
+// 通用外币预览（周边预建商品表单仍在用；订单表单走下方 previewEntry 双模式）
+Aoi.orders.previewRmb = function (priceId, currencyId, outId) {
+  var price = parseFloat(document.getElementById(priceId).value);
+  var currency = document.getElementById(currencyId).value;
+  var out = document.getElementById(outId);
+  if (!out) return;
+  if (isNaN(price)) { out.textContent = ''; return; }
+  out.textContent = '= ¥' + Aoi.calc.toRmb(price, currency).toFixed(2);
+};
+
 // 录入页：币种变化 → 切换人民币/外币两种录入形态（v1.8.0 取消自动转换）
 Aoi.orders.onEntryCurrencyChange = function () {
   var currency = document.getElementById('oCurrency').value;
