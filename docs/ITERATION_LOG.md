@@ -29,7 +29,7 @@ git reset --hard <tag|commit> # 整体回退到某状态（谨慎，会丢弃其
 - **问题**：v1.8.0 重写录入逻辑时删除了 `Aoi.orders.previewRmb` 函数，但 `index.html` 周边（预建商品）表单的 `pCurrency` / `pPrice` 仍引用它 → 录入周边价格时控制台报错、无预览。
 - **改动**：
   - `js/orders.js`：恢复通用 `previewRmb(priceId, currencyId, outId)`（周边表单保留自动预览；订单表单已改用 v1.8.0 的 `previewEntry` 双模式，互不影响）。
-  - `tests/orders-entry.test.js`：新增回归测试（周边表单两个元素引用的函数存在且可执行）。
+  - `tests/orders-entry.test.js`：新增回归测试（周边表单两个元素引用的函数存在且可执行）。总用例 62，全绿。
 - **教训**：删除公共函数前应全仓 grep 引用（本次主迭代遗漏了 index.html 内联 onclick 的引用方式）。
 
 ## 第 2 轮 · CI 质量门禁 + 部署前测试
