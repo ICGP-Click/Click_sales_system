@@ -162,10 +162,16 @@ $$;
 -- =====================================================================
 -- 团员端匿名访问（security definer 绕过 RLS，内部校验 member_key）
 -- 注意：任何持有 member_key 的人都能读/写团队数据，密钥即访问凭证。
+-- ⚠️ 线上库重跑验证清单（v1.7.0 起本节函数签名有变更，必须 drop 后重建）：
+--   1. 在 Supabase SQL Editor 顺序执行本文件；
+--   2. 执行下方「排查 SQL」确认两个 RPC 存在且 anon 有 EXECUTE 权限；
+--   3. 确认每个团队在 team_data 有一行（写入 RPC 已改为 upsert 自动补行）。
 -- =====================================================================
 
--- 按团员密钥读取团队名 + 业务数据 blob（匿名，无 auth.uid）
-create or replace function public.get_team_by_member_key(member_key text)
+-- 按团员密钥读取团队名 + 业务数据 blob + 数据版本（匿名，无 auth.uid）
+-- drop 再建：create or replace 无法变更返回结构，旧签名残留会导致重跑报错
+drop function if exists public.get_team_by_member_key(text);
+create function public.get_team_by_member_key(member_key text)
 returns json
 language sql
 security definer
@@ -174,7 +180,8 @@ set search_path = public
 as $$
   select json_build_object(
     'name', t.name,
-    'data', coalesce(d.data, '{}'::jsonb)
+    'data', coalesce(d.data, '{}'::jsonb),
+    'updatedAt', d.updated_at
   )
   from teams t
   left join team_data d on d.team_id = t.id
@@ -183,23 +190,56 @@ as $$
 $$;
 
 -- 按团员密钥写入业务数据 blob（匿名，覆盖整份数据；密钥即授权）
-create or replace function public.update_team_data_by_member_key(member_key text, new_data jsonb)
-returns void
+-- v1.7.0 修复：
+--   ① insert ... on conflict upsert —— 旧版只 update，team_data 缺行时
+--      影响 0 行仍返回成功，造成"保存成功但什么都没写"（仅团员端复现）；
+--   ② 可选乐观锁 expected_updated_at —— 与 team_data.updated_at 不一致时拒绝，
+--      防止整 blob 覆盖竞态（"改了又没了"）；
+--   ③ 返回写入后的 updated_at，供前端下次写入作为乐观锁版本。
+drop function if exists public.update_team_data_by_member_key(text, jsonb);
+create function public.update_team_data_by_member_key(
+  member_key text,
+  new_data jsonb,
+  expected_updated_at timestamptz default null
+)
+returns timestamptz
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
   target_team_id uuid;
+  new_updated_at timestamptz;
 begin
   select t.id into target_team_id from teams t where t.member_key = member_key limit 1;
   if target_team_id is null then
     raise exception '密钥无效';
   end if;
 
-  update team_data set data = new_data, updated_at = now() where team_id = target_team_id;
+  if expected_updated_at is not null then
+    if (select updated_at from team_data where team_id = target_team_id)
+        is distinct from expected_updated_at then
+      raise exception '数据已被他人修改，请刷新后重试';
+    end if;
+  end if;
+
+  insert into team_data (team_id, data, updated_at)
+  values (target_team_id, new_data, now())
+  on conflict (team_id) do update
+    set data = excluded.data, updated_at = excluded.updated_at
+  returning updated_at into new_updated_at;
+
+  return new_updated_at;
 end;
 $$;
+
+-- —— 排查 SQL（线上排障时在 SQL Editor 执行）——
+-- ① RPC 是否存在：
+--   select proname from pg_proc where pronamespace = 'public'::regnamespace
+--     and proname in ('get_team_by_member_key','update_team_data_by_member_key');
+-- ② anon 是否有执行权限（应均为 true）：
+--   select has_function_privilege('anon','public.get_team_by_member_key(text)','EXECUTE');
+-- ③ 团队密钥是否为 null：select id, name, member_key from teams;
 
 -- =====================================================================
 -- 行级安全策略（RLS）

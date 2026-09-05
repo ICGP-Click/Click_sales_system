@@ -77,6 +77,21 @@ async function toNapcat(payload) {
   return { status: r.status, data: data };
 }
 
+// NapCat 转发串行队列：相邻两条间隔 ≥1s（批量私聊时防 QQ 风控/限频）
+let napcatQueue = Promise.resolve();
+let napcatLastAt = 0;
+function throttledNapcat(payload) {
+  const task = napcatQueue.then(async function () {
+    const wait = 1000 - (Date.now() - napcatLastAt);
+    if (wait > 0) await new Promise(function (r) { setTimeout(r, wait); });
+    napcatLastAt = Date.now();
+    return toNapcat(payload);
+  });
+  // 队列断链自愈：某条失败不影响后续
+  napcatQueue = task.catch(function () {});
+  return task;
+}
+
 function send(res, status, obj) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(obj));
@@ -102,7 +117,7 @@ http.createServer(async function (req, res) {
     if (!payload || (!payload.user_id && !payload.group_id) || typeof payload.message !== 'string') {
       return send(res, 400, { error: 'bad payload' });
     }
-    const out = await toNapcat(payload);
+    const out = await throttledNapcat(payload);
     send(res, out.status, out.data);
   });
 }).listen(PORT, function () {

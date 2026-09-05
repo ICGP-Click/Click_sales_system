@@ -52,19 +52,42 @@ Aoi.bot.sendGroup = function (message) {
   return Aoi.bot.request({ group_id: Aoi.bot.config.groupId, message: message });
 };
 
-// 批量推送通知：按 buyer 找 QQ 号私聊，查不到则并入群发；统计失败数
+// 批量私聊：按 memberMeta 的 QQ 逐人 send_private_msg。
+// 此前 sendPrivate 从未被任何链路调用，私聊推送实际不存在——此函数补上该链路。
+// relay 侧对 NapCat 转发做 ≥1s 节流防风控，前端顺序发送即可。
+// 返回 { sent, failed, sentIds, unbound }：sentIds 标记哪些通知已私聊成功，
+// unbound 为未绑定 QQ 的圈名（需走群发兜底）。
+Aoi.bot.pushPrivate = async function (notifications) {
+  var d = Aoi.orders.ensure();
+  var meta = d.memberMeta || {};
+  var sent = 0, failed = 0;
+  var sentIds = [], unbound = [];
+  for (var i = 0; i < notifications.length; i++) {
+    var n = notifications[i];
+    var qq = (n.buyer && meta[n.buyer]) ? meta[n.buyer].qq : null;
+    if (!qq) {
+      if (n.buyer && unbound.indexOf(n.buyer) < 0) unbound.push(n.buyer);
+      continue;
+    }
+    try {
+      await Aoi.bot.sendPrivate(qq, n.body);
+      sent++;
+      sentIds.push(n.id);
+    } catch (e) {
+      failed++;
+    }
+  }
+  return { sent: sent, failed: failed, sentIds: sentIds, unbound: unbound };
+};
+
+// 群发（@ 每个已绑定 QQ 的人；@ 映射按 buyer→qq 查 memberMeta，不依赖 body 前缀格式）
 Aoi.bot.pushAll = async function (notifications) {
   if (!Aoi.bot.config.enabled || !Aoi.bot.config.relay) throw new Error('QQ 机器人未接入');
   var d = Aoi.orders.ensure();
   var meta = d.memberMeta || {};
-  // 群发 @ 每个人（有绑定 QQ 用 [CQ:at]，无绑定退化为纯文本）
   var lines = notifications.map(function (n) {
     var qq = (n.buyer && meta[n.buyer]) ? meta[n.buyer].qq : null;
-    var rest = n.body;
-    var buyer = n.buyer || '';
-    if (buyer && rest.indexOf(buyer + '：') === 0) rest = rest.slice(buyer.length + 1);
-    else if (buyer && rest.indexOf(buyer + ' ') === 0) rest = rest.slice(buyer.length + 1);
-    if (qq) return '[CQ:at,qq=' + qq + '] ' + rest;
+    if (qq) return '[CQ:at,qq=' + qq + '] ' + n.body;
     return n.body;
   });
   await Aoi.bot.sendGroup(lines.join('\n'));
@@ -85,9 +108,16 @@ Aoi.bot.saveSettings = async function () {
   var d = Aoi.orders.ensure();
   var get = function (id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; };
   var chk = document.getElementById('botEnabled');
+  var enabled = !!(chk && chk.checked);
+  var relay = get('botRelay');
+  // https 页面下浏览器会拦截 http 请求（混合内容），CSP 也不放行 —— 直接拦在保存时
+  if (enabled && relay && window.location.protocol === 'https:' && !/^https:\/\//i.test(relay)) {
+    Aoi.toast('relay 地址必须为 https：当前页面是 https，请求 http 地址会被浏览器直接拦截，推送必然失败', 'error');
+    return;
+  }
   d.botConfig = {
-    enabled: !!(chk && chk.checked),
-    relay: get('botRelay'),
+    enabled: enabled,
+    relay: relay,
     groupId: get('botGroupId')
   };
   await Aoi.saveTeamData(d);

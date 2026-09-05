@@ -194,17 +194,40 @@ Aoi.notify.clearSent = async function () {
   Aoi.toast('已清除 ' + (before - d.notifications.length) + ' 条已发送', 'success');
 };
 
-// 通过 QQ 机器人推送未发通知（未接入时抛错提示）
-Aoi.notify.pushBot = async function () {
+// 通过 QQ 机器人推送未发通知。mode：
+//   'group'（默认）— 群发一条，@ 已绑定 QQ 的人
+//   'private'      — 逐人私聊（未绑定的保持未发）
+//   'all'          — 先逐人私聊，剩余（未绑定）并入群发
+Aoi.notify.pushBot = async function (mode) {
+  mode = mode || 'group';
   var d = Aoi.notify.ensure();
   var unsent = d.notifications.filter(function (n) { return !n.sent; });
   if (!unsent.length) { Aoi.toast('没有未发送的通知', 'info'); return; }
+  var markSent = function (ids) {
+    d.notifications.forEach(function (n) { if (ids.indexOf(n.id) >= 0) n.sent = true; });
+  };
   try {
+    if (mode === 'private' || mode === 'all') {
+      var p = await Aoi.bot.pushPrivate(unsent);
+      markSent(p.sentIds);
+      var rest = d.notifications.filter(function (n) { return !n.sent; });
+      if (mode === 'all' && rest.length) {
+        await Aoi.bot.pushAll(rest);
+        markSent(rest.map(function (n) { return n.id; }));
+      }
+      await Aoi.saveTeamData(d);
+      Aoi.notify.render();
+      var msg = '私聊成功 ' + p.sent + ' 条';
+      if (p.failed) msg += '，失败 ' + p.failed + ' 条';
+      if (p.unbound.length) msg += '；未绑定 QQ：' + p.unbound.join('、');
+      Aoi.toast(msg, p.failed ? 'warning' : 'success');
+      return;
+    }
     await Aoi.bot.pushAll(unsent);
-    unsent.forEach(function (n) { n.sent = true; });
+    markSent(unsent.map(function (n) { return n.id; }));
     await Aoi.saveTeamData(d);
     Aoi.notify.render();
-    Aoi.toast('已推送 ' + unsent.length + ' 条', 'success');
+    Aoi.toast('已群发 ' + unsent.length + ' 条', 'success');
   } catch (e) {
     Aoi.toast(e.message || 'QQ 机器人未接入', 'warning');
   }

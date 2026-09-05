@@ -165,10 +165,16 @@ Aoi-system 后续将**聚焦团长管理端**，精简团员自助功能入口�
 
 1. 克隆本仓库。
 2. 在 [Supabase](https://supabase.com/) 创建新项目。
-3. 在 Supabase SQL Editor 中运行以下初始化脚本，建立表结构并配置 RLS 权限：
+3. 在 Supabase SQL Editor 中运行仓库根目录的 **`supabase-schema.sql`**（三表 + RPC + RLS，设计为可安全重复执行）：
+
+> ⚠️ **老库升级必读（v1.7.0 起）**：
+> - 本项目当前 schema 为 `teams` / `team_members` / `team_data` 三表模型（旧版 `leader_data` 单表已废弃）。
+> - **线上库必须重跑最新 `supabase-schema.sql`**——团员端的两个 RPC（`get_team_by_member_key` / `update_team_data_by_member_key`）在 v1.7.0 修复了"保存静默丢失"缺陷（旧版只 update 不 insert，`team_data` 缺行时保存假成功），且函数签名有变（已改为 drop 后重建，重跑不会报错）。
+> - 重跑后执行文件尾部的「排查 SQL」确认 RPC 存在且 anon 有执行权限。
+> - 以下旧版 SQL 仅供参考，**不要再执行**：
 
 ```sql
--- 1. 创建核心数据表 (自带级联删除)
+-- （已废弃）旧版 leader_data 单表模型
 CREATE TABLE leader_data (
   user_id uuid references auth.users ON DELETE CASCADE primary key, 
   query_key text unique,                                            
@@ -177,18 +183,14 @@ CREATE TABLE leader_data (
   updated_at timestamp with time zone default timezone('utc'::text, now())
 );
 
--- 2. 开启行级安全策略 (RLS)
 ALTER TABLE leader_data ENABLE ROW LEVEL SECURITY;
 
--- 3. 团长增删改查自己数据的权限
 CREATE POLICY "团长完全管理自己的数据" ON leader_data
   FOR ALL USING (auth.uid() = user_id);
 
--- 4. 团员免登录查询权限
 CREATE POLICY "允许公开读取数据" ON leader_data
   FOR SELECT USING (true);
 
--- 5. 团员免登录提交申请权限
 CREATE POLICY "允许公开提交申请" ON leader_data
   FOR UPDATE USING (true) WITH CHECK (true);
 ```
@@ -200,6 +202,7 @@ SUPABASE_ANON_KEY = 'your-anon-key'
 ```
 6. （可选）在 Supabase 开启 Custom SMTP 以解锁无限制的邮箱注册功能。
 7. 部署整个项目文件夹到任意静态托管平台 (Netlify, Vercel, GitHub Pages) 即可运行。推荐点击上方 Deploy to Netlify 按钮一键部署！
+8. （可选）运行测试：`npm test`（vitest + jsdom，见 `tests/`）。
 
 ---
 

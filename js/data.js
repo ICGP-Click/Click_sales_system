@@ -122,27 +122,60 @@ Aoi.regenerateMemberKey = async function () {
   return r.data;
 };
 
+// RPC 错误分类：把 PostgREST 报错翻译成可操作的中文提示（团员端排障的关键，
+// 此前所有失败都被吞成"密钥无效"导致无法定位）
+Aoi.explainRpcError = function (msg, context) {
+  msg = msg || '';
+  if (/Could not find the function|schema cache|function .* does not exist/i.test(msg)) {
+    return '服务端缺少' + context + '接口（RPC 不存在）——请在 Supabase SQL Editor 重跑 supabase-schema.sql 后重试';
+  }
+  if (/已被他人修改/.test(msg)) {
+    return '数据已被他人修改，请刷新页面重新进入后重试';
+  }
+  if (/密钥无效/.test(msg)) {
+    return '团员密钥无效，请向团长确认后重新输入';
+  }
+  if (/Failed to fetch|NetworkError|network/i.test(msg)) {
+    return '网络连接失败，请检查网络后重试';
+  }
+  return null;
+};
+
 // 团员端：按团员密钥读取团队数据（debug 走 localStorage，否则匿名 RPC）
+// 返回 { name, data, updatedAt }；updatedAt 供下次写入做乐观锁版本。
+// 抛错（含分类提示），不再吞错误——密钥不匹配才返回 null。
 Aoi.getTeamDataByMemberKey = async function (key) {
   var debugTeam = JSON.parse(localStorage.getItem('aoi_debug_team') || 'null');
   if (debugTeam && (debugTeam.member_key || 'DEMO') === key) {
     return {
       name: debugTeam.name || '调试团',
-      data: JSON.parse(localStorage.getItem('aoi_debug_data') || '{}')
+      data: JSON.parse(localStorage.getItem('aoi_debug_data') || '{}'),
+      updatedAt: null
     };
   }
   var r = await Aoi.db.rpc('get_team_by_member_key', { member_key: key });
-  if (r.error || !r.data) return null;
+  if (r.error) {
+    var hint = Aoi.explainRpcError(r.error.message, '团员端读取');
+    throw new Error(hint || ('读取团队数据失败：' + r.error.message));
+  }
+  if (!r.data) return null; // 密钥不匹配（或该团队 member_key 为空）
   return r.data;
 };
 
-// 团员端：按团员密钥保存团队数据
-Aoi.saveTeamDataByMemberKey = async function (key, data) {
+// 团员端：按团员密钥保存团队数据（expectedUpdatedAt 为上次读到的数据版本，乐观锁）
+// 成功返回写入后的 updated_at（下次写入的版本号）
+Aoi.saveTeamDataByMemberKey = async function (key, data, expectedUpdatedAt) {
   var debugTeam = JSON.parse(localStorage.getItem('aoi_debug_team') || 'null');
   if (debugTeam && (debugTeam.member_key || 'DEMO') === key) {
     localStorage.setItem('aoi_debug_data', JSON.stringify(data));
-    return;
+    return null;
   }
-  var r = await Aoi.db.rpc('update_team_data_by_member_key', { member_key: key, new_data: data });
-  if (r.error) throw new Error(r.error.message);
+  var params = { member_key: key, new_data: data };
+  if (expectedUpdatedAt) params.expected_updated_at = expectedUpdatedAt;
+  var r = await Aoi.db.rpc('update_team_data_by_member_key', params);
+  if (r.error) {
+    var hint = Aoi.explainRpcError(r.error.message, '团员端写入');
+    throw new Error(hint || ('保存失败：' + r.error.message));
+  }
+  return r.data;
 };

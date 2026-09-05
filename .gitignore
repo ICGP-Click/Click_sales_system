@@ -6,3 +6,4 @@ assessment-b-*.png
 .impeccable/
 js/config.js
 .env
+.zcode/

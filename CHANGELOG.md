@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.7.0 (2026-09-06)
+
+### Fixed
+- **团员端保存静默丢失（P0 根因①）** — `update_team_data_by_member_key` 旧版只执行 update：`team_data` 缺行时影响 0 行仍返回成功，表现为"保存成功但什么都没写"（仅团员端复现，团长端走 upsert 自动补行故正常）。改为 `insert ... on conflict do update`
+- **错误吞噬（P0 根因②）** — `getTeamDataByMemberKey` 此前把 RPC 缺失 / 网络失败 / 密钥错误全部吞成"密钥无效"。新增 `Aoi.explainRpcError` 分类透出（RPC 不存在→提示重跑 schema；版本冲突→提示刷新；密钥无效→提示向团长确认），`member.enter` 补 try/catch
+- **整 blob 覆盖竞态（P0 根因③）** — 写入 RPC 新增可选 `expected_updated_at` 乐观锁参数并返回新 `updated_at`；团员端 `Aoi.member.persist` 统一携带/更新版本号，冲突时清空本地版本并提示刷新
+- **`supabase-schema.sql` 幂等升级** — 团员端两个 RPC 改为 drop 后重建（`create or replace` 无法变更签名，旧库重跑会报错），文件头附线上重跑验证清单与排查 SQL
+
+### Added
+- **QQ 机器人私聊推送** — 此前 `sendPrivate` 定义了但全链路无调用方，私聊功能实际不存在；新增 `Aoi.bot.pushPrivate`（按 `memberMeta` QQ 逐人私聊，返回成功/失败/未绑定清单），通知推送提供「群发(@) / 私聊 / 全部」三选；群发 @ 改为直接按 buyer→qq 映射，不再依赖 body 前缀格式
+- **relay 转发节流** — NapCat 转发改串行队列，相邻两条间隔 ≥1s（批量私聊防风控）
+- **relay https 校验** — https 站点下保存 http relay 地址直接拦截并说明原因（浏览器混合内容拦截）；设置页 placeholder 同步提示
+- **团员端掩码回执** — 地址保存成功后显示掩码回执（首尾各 2 字 + `****`），确认"保存的确实是刚输入的"且不暴露原文
+- **测试基建** — `package.json` + vitest + jsdom（`npm test`）；harness 将 index.html 装入 jsdom 并 eval `js/` 模块，首批 26 个用例覆盖 calc 换算、intl 分摊、错误分类、乐观锁 persist、私聊推送、掩码
+
+### Changed
+- `getTeamDataByMemberKey` 返回结构新增 `updatedAt`（数据版本），失败改为抛错（不再返回 null 吞错）
+
 ## v1.6.0 (2026-08-17)
 
 ### Added
