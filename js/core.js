@@ -163,6 +163,37 @@ Aoi.exportImage = function (btn) {
   });
 };
 
+// 导出表格为文件（v2.0.0）：优先 SheetJS .xlsx，CDN 未加载时回退 CSV。
+// 按钮属性与 exportImage 一致：data-table（表 id）+ data-name（文件名）
+Aoi.tableExport = function (btn) {
+  var id = btn.getAttribute('data-table');
+  var name = btn.getAttribute('data-name') || '表格';
+  var table = document.getElementById(id);
+  if (!table) return;
+  if (typeof XLSX === 'object' && XLSX.utils) {
+    try {
+      var wb = XLSX.utils.table_to_book(table, { sheet: 'Sheet1' });
+      XLSX.writeFile(wb, name + '.xlsx');
+      Aoi.toast('已下载「' + name + '」.xlsx', 'success');
+      return;
+    } catch (e) { /* 回退 CSV */ }
+  }
+  var rows = [];
+  table.querySelectorAll('tr').forEach(function (tr) {
+    var cells = [];
+    tr.querySelectorAll('th,td').forEach(function (c) {
+      cells.push('"' + (c.innerText || '').replace(/"/g, '""') + '"');
+    });
+    rows.push(cells.join(','));
+  });
+  var blob = new Blob(['\ufeff' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name + '.csv';
+  a.click();
+  Aoi.toast('已下载「' + name + '」.csv', 'success');
+};
+
 // —— 撤销机制：删除前快照，30 秒内可恢复 ——
 
 Aoi.undo = { snapshot: null, label: '', timer: null };
@@ -214,6 +245,7 @@ Aoi.refreshViews = function () {
   Aoi.warehouse.renderTransfers();
   Aoi.orders.renderCnChanges();
   Aoi.overview.render();
+  if (Aoi.limits) Aoi.limits.render();
 };
 
 // 总览首页：登录后待办统计（待审核 / 待催缴 / 待发货 / 未到货）+ 开设 IP 一览

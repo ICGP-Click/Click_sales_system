@@ -146,3 +146,33 @@ textarea:focus {
     padding: 0.875rem;
   }
 }
+
+/* v2.0.0（问题 4 收尾）：移动端订单表卡片视图 —— 窄屏下每行变为一张卡片，
+   td::before 用 data-label 显示列名，避免横向滚动过远 */
+@media (max-width: 640px) {
+  table.responsive-cards thead {
+    display: none;
+  }
+  table.responsive-cards tr {
+    display: block;
+    border: 1px solid var(--hairline);
+    border-radius: 0.5rem;
+    margin-bottom: 0.5rem;
+    padding: 0.5rem;
+  }
+  table.responsive-cards td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    border: none;
+    padding: 0.25rem 0.5rem;
+    white-space: normal;
+  }
+  table.responsive-cards td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: #9ca3af;
+    flex-shrink: 0;
+  }
+}

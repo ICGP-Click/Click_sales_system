@@ -29,7 +29,8 @@ const MODULES = [
   'js/approval.js',
   'js/member.js',
   'js/notify.js',
-  'js/bot.js'
+  'js/bot.js',
+  'js/limits.js'
 ];
 
 const loadErrors = [];
