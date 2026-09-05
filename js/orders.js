@@ -676,23 +676,44 @@ Aoi.orders.activityStatusOptions = function (cur) {
   }).join('');
 };
 
+// 出货模糊日期建议（x年上/中/下旬、x年春夏秋冬、x年第N季度；近三年）
+Aoi.orders.shipFuzzySuggestions = function (now) {
+  var y = (now ? new Date(now) : new Date()).getFullYear();
+  var out = [];
+  [y - 1, y, y + 1].forEach(function (yy) {
+    ['春', '夏', '秋', '冬'].forEach(function (s) { out.push(yy + '年' + s + '季'); });
+    for (var q = 1; q <= 4; q++) out.push(yy + '年第' + q + '季度');
+    for (var m = 1; m <= 12; m++) ['上旬', '中旬', '下旬'].forEach(function (x) { out.push(yy + '年' + m + '月' + x); });
+  });
+  return out;
+};
+
 Aoi.orders.renderActivities = function () {
   var d = Aoi.orders.ensure();
   var tbody = document.getElementById('activityTbody');
   if (!tbody) return;
+  var fuzzyList = document.getElementById('shipFuzzyOptions');
+  if (fuzzyList) fuzzyList.innerHTML = Aoi.orders.shipFuzzySuggestions()
+    .map(function (s) { return '<option value="' + Aoi.escapeHtml(s) + '">'; }).join('');
   tbody.innerHTML = d.activities.length ? d.activities.map(function (name, i) {
     var m = d.activityMeta[name] || {};
-    return '<tr class="border-b border-gray-100">'
+    var buyers = m.buyers || [];
+    var trackings = m.trackings || [];
+    return '<tr class="border-b border-gray-100 align-top">'
       + '<td class="px-2 py-2 text-right text-gray-400 select-none">' + (i + 1) + '</td>'
       + '<td class="px-3 py-2 font-semibold whitespace-nowrap"><button data-jump="' + Aoi.escapeHtml(name) + '" class="text-blue-600 hover:underline text-left">' + Aoi.escapeHtml(name) + '</button></td>'
       + '<td class="px-3 py-2"><select data-activity="' + Aoi.escapeHtml(name) + '" data-field="ip" class="border border-gray-300 rounded px-2 py-1 text-sm">' + Aoi.orders.ipOptions(m.ip) + '</select></td>'
       + '<td class="px-3 py-2"><input type="date" value="' + Aoi.escapeHtml(m.buyDate || '') + '" data-activity="' + Aoi.escapeHtml(name) + '" data-field="buyDate" class="border border-gray-300 rounded px-2 py-1 text-sm"></td>'
       + '<td class="px-3 py-2"><input type="date" value="' + Aoi.escapeHtml(m.shipDate || '') + '" data-activity="' + Aoi.escapeHtml(name) + '" data-field="shipDate" class="border border-gray-300 rounded px-2 py-1 text-sm"></td>'
+      + '<td class="px-3 py-2"><input type="text" list="shipFuzzyOptions" value="' + Aoi.escapeHtml(m.shipDateFuzzy || '') + '" placeholder="如 9月中旬" data-activity="' + Aoi.escapeHtml(name) + '" data-field="shipDateFuzzy" class="border border-gray-300 rounded px-2 py-1 text-sm w-28"></td>'
       + '<td class="px-3 py-2"><input type="text" value="' + Aoi.escapeHtml(m.link || '') + '" placeholder="平台链接" data-activity="' + Aoi.escapeHtml(name) + '" data-field="link" class="border border-gray-300 rounded px-2 py-1 text-sm w-40"></td>'
       + '<td class="px-3 py-2"><select data-activity="' + Aoi.escapeHtml(name) + '" data-field="status" class="border border-gray-300 rounded px-2 py-1 text-sm">' + Aoi.orders.activityStatusOptions(m.status) + '</select></td>'
+      + '<td class="px-3 py-2"><button data-act-buyers="' + Aoi.escapeHtml(name) + '" class="px-2 py-1 border border-gray-300 rounded text-xs ' + (buyers.length ? 'text-blue-600 border-blue-300' : 'text-gray-500') + ' hover:bg-blue-50 whitespace-nowrap">' + (buyers.length ? buyers.length + ' 人' : '填写') + '</button></td>'
+      + '<td class="px-3 py-2"><button data-act-track="' + Aoi.escapeHtml(name) + '" class="px-2 py-1 border border-gray-300 rounded text-xs ' + (trackings.length ? 'text-blue-600 border-blue-300' : 'text-gray-500') + ' hover:bg-blue-50 whitespace-nowrap">' + (trackings.length ? trackings.length + ' 个' : '填写') + '</button></td>'
+      + '<td class="px-3 py-2"><input type="text" value="' + Aoi.escapeHtml(m.remark || '') + '" placeholder="备注" data-activity="' + Aoi.escapeHtml(name) + '" data-field="remark" class="border border-gray-300 rounded px-2 py-1 text-sm w-32"></td>'
       + '<td class="px-3 py-2"><button data-remove="' + Aoi.escapeHtml(name) + '" class="text-red-500 hover:underline">删</button></td>'
       + '</tr>';
-  }).join('') : '<tr><td colspan="8" class="px-3 py-2 text-gray-400">暂无活动，录入订单或手动新增</td></tr>';
+  }).join('') : '<tr><td colspan="12" class="px-3 py-2 text-gray-400">暂无活动，录入订单或手动新增</td></tr>';
   Aoi.orders.renderBuyers();
 };
 
@@ -705,7 +726,7 @@ Aoi.orders.addActivity = async function () {
   var d = Aoi.orders.ensure();
   if (d.activities.indexOf(name) >= 0) { Aoi.toast('该活动已存在', 'warning'); return; }
   d.activities.push(name);
-  d.activityMeta[name] = { buyDate: '', shipDate: '', link: '', status: '未开始', ip: ip };
+  d.activityMeta[name] = { buyDate: '', shipDate: '', shipDateFuzzy: '', link: '', status: '未开始', ip: ip, remark: '', buyers: [], trackings: [] };
   await Aoi.saveTeamData(d);
   el.value = '';
   Aoi.orders.renderActivities();
@@ -909,8 +930,101 @@ document.getElementById('activityTbody').addEventListener('click', function (e) 
   var btn = e.target.closest('button[data-remove]');
   if (btn) { Aoi.orders.removeActivity(btn.getAttribute('data-remove')); return; }
   var jump = e.target.closest('button[data-jump]');
-  if (jump) Aoi.orders.jumpToActivity(jump.getAttribute('data-jump'));
+  if (jump) { Aoi.orders.jumpToActivity(jump.getAttribute('data-jump')); return; }
+  var b = e.target.closest('button[data-act-buyers]');
+  if (b) { Aoi.orders.openActBuyers(b.getAttribute('data-act-buyers')); return; }
+  var t = e.target.closest('button[data-act-track]');
+  if (t) Aoi.orders.openActTrack(t.getAttribute('data-act-track'));
 });
+
+// —— 活动购买人信息 / 快递单号弹窗（v1.9.0）——
+
+Aoi.orders.actTarget = null;
+
+// 购买人一行：购买人 + 购买账号（邮箱）+ 送达地址
+Aoi.orders.buyerRowHtml = function (b) {
+  b = b || {};
+  return '<div class="grid grid-cols-3 gap-2 act-buyer-row">'
+    + '<input class="ab-buyer border border-gray-300 rounded px-2 py-1 text-sm" placeholder="圈名" value="' + Aoi.escapeHtml(b.buyer || '') + '">'
+    + '<input class="ab-account border border-gray-300 rounded px-2 py-1 text-sm" placeholder="邮箱" value="' + Aoi.escapeHtml(b.account || '') + '">'
+    + '<input class="ab-address border border-gray-300 rounded px-2 py-1 text-sm" placeholder="送达地址" value="' + Aoi.escapeHtml(b.address || '') + '">'
+    + '</div>';
+};
+
+Aoi.orders.openActBuyers = function (name) {
+  var d = Aoi.orders.ensure();
+  var m = d.activityMeta[name] || {};
+  Aoi.orders.actTarget = name;
+  var title = document.getElementById('actBuyersTitle');
+  if (title) title.textContent = '活动：' + name;
+  var box = document.getElementById('actBuyerRows');
+  if (box) {
+    var rows = (m.buyers && m.buyers.length) ? m.buyers : [{}];
+    box.innerHTML = rows.map(Aoi.orders.buyerRowHtml).join('');
+  }
+  document.getElementById('actBuyersModal').classList.remove('hidden');
+};
+
+Aoi.orders.addBuyerRow = function () {
+  var box = document.getElementById('actBuyerRows');
+  if (box) box.insertAdjacentHTML('beforeend', Aoi.orders.buyerRowHtml({}));
+};
+
+Aoi.orders.closeActBuyers = function () {
+  document.getElementById('actBuyersModal').classList.add('hidden');
+  Aoi.orders.actTarget = null;
+};
+
+Aoi.orders.saveActBuyers = async function () {
+  var name = Aoi.orders.actTarget;
+  if (!name) return;
+  var d = Aoi.orders.ensure();
+  if (!d.activityMeta[name]) d.activityMeta[name] = {};
+  var rows = [];
+  document.querySelectorAll('#actBuyerRows .act-buyer-row').forEach(function (row) {
+    var buyer = row.querySelector('.ab-buyer').value.trim();
+    if (!buyer) return; // 圈名为空的行丢弃
+    rows.push({
+      buyer: buyer,
+      account: row.querySelector('.ab-account').value.trim(),
+      address: row.querySelector('.ab-address').value.trim()
+    });
+  });
+  d.activityMeta[name].buyers = rows;
+  await Aoi.saveTeamData(d);
+  Aoi.orders.closeActBuyers();
+  Aoi.orders.renderActivities();
+  Aoi.toast('已保存「' + name + '」购买人信息（' + rows.length + ' 人）', 'success');
+};
+
+Aoi.orders.openActTrack = function (name) {
+  var d = Aoi.orders.ensure();
+  var m = d.activityMeta[name] || {};
+  Aoi.orders.actTarget = name;
+  var title = document.getElementById('actTrackTitle');
+  if (title) title.textContent = '活动：' + name + '（每行一个单号，可随时添加行数）';
+  var input = document.getElementById('actTrackInput');
+  if (input) input.value = (m.trackings || []).join('\n');
+  document.getElementById('actTrackModal').classList.remove('hidden');
+};
+
+Aoi.orders.closeActTrack = function () {
+  document.getElementById('actTrackModal').classList.add('hidden');
+  Aoi.orders.actTarget = null;
+};
+
+Aoi.orders.saveActTrack = async function () {
+  var name = Aoi.orders.actTarget;
+  if (!name) return;
+  var d = Aoi.orders.ensure();
+  if (!d.activityMeta[name]) d.activityMeta[name] = {};
+  var input = document.getElementById('actTrackInput');
+  d.activityMeta[name].trackings = (input ? input.value : '').split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
+  await Aoi.saveTeamData(d);
+  Aoi.orders.closeActTrack();
+  Aoi.orders.renderActivities();
+  Aoi.toast('已保存快递单号 ' + d.activityMeta[name].trackings.length + ' 个', 'success');
+};
 document.getElementById('buyerTbody').addEventListener('click', function (e) {
   var btn = e.target.closest('button[data-del-buyer]');
   if (btn) Aoi.orders.removeBuyer(btn.getAttribute('data-del-buyer'));

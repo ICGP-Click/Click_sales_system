@@ -125,3 +125,24 @@ textarea:focus {
   -webkit-line-clamp: unset;
   max-width: 16rem;
 }
+
+/* v1.9.0（问题 4）：压缩数据表水平间距，改善"左右间距过大" */
+.data-table th.px-3,
+.data-table td.px-3 {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+/* v1.9.0（问题 4）：移动端适配 —— 首列 sticky 对照 + 容器贴边 */
+@media (max-width: 767px) {
+  .data-table th:first-child,
+  .data-table td:first-child {
+    position: sticky;
+    left: 0;
+    background: var(--surface-card);
+    z-index: 1;
+  }
+  .p-6 {
+    padding: 0.875rem;
+  }
+}

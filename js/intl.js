@@ -86,7 +86,43 @@ Aoi.intl.buyerRows = function (batchId, items) {
   }).sort(function (a, b) { return b.intl - a.intl; });
 };
 
-// 渲染国际计算页
+// 仪表盘数据：已分摊 / 目标金额 插值与正负差值（v1.9.0 恢复缺失的差值显示）
+Aoi.intl.gaugeData = function (items, targetAmount) {
+  var feeTotal = 0;
+  items.forEach(function (it) { feeTotal += it.weightedTotalFee; });
+  var diff = (targetAmount || 0) - feeTotal;
+  return {
+    tareTotal: items.reduce(function (s, it) { return s + it.totalWeight; }, 0),
+    feeTotal: feeTotal,
+    diff: diff,
+    pct: targetAmount > 0 ? Math.min(100, Math.round(feeTotal / targetAmount * 100)) : 0
+  };
+};
+
+// 悬浮仪表盘（fixed 右下角，可收起）：表格滚动时仍可查阅目标金额插值
+Aoi.intl.renderGauge = function (g) {
+  var gauge = document.getElementById('intlGauge');
+  if (!gauge) return;
+  gauge.classList.remove('hidden');
+  var bar = document.getElementById('intlGaugeBar');
+  if (bar) bar.style.width = g.pct + '%';
+  var text = document.getElementById('intlGaugeText');
+  if (text) {
+    text.textContent = '已分摊 ¥' + g.feeTotal.toFixed(2) + ' / ¥' + (g.targetAmount || 0).toFixed(2)
+      + '（' + g.pct + '%）· 差值 ' + (g.diff >= 0 ? '+' : '') + g.diff.toFixed(2)
+      + ' · 总重 ' + g.tareTotal.toFixed(2);
+  }
+};
+
+Aoi.intl.toggleGauge = function () {
+  var body = document.getElementById('intlGaugeBody');
+  var btn = document.getElementById('intlGaugeToggle');
+  if (!body) return;
+  var collapsed = body.classList.toggle('hidden');
+  if (btn) btn.textContent = collapsed ? '展开' : '收起';
+};
+
+// 渲染国际计算页（v1.9.0：均价列只读展示、加权单价列可编辑覆盖、差值 + 悬浮仪表盘）
 Aoi.intl.render = function () {
   var batch = Aoi.intl.getBatch(document.getElementById('intlBatch').value);
   if (!batch) { Aoi.intl.clear(); return; }
@@ -94,22 +130,32 @@ Aoi.intl.render = function () {
 
   var items = Aoi.intl.buildItems(batch);
   var tbody = document.getElementById('intlTbody');
-  var tareTotal = 0, feeTotal = 0;
   tbody.innerHTML = items.map(function (it, i) {
-    tareTotal += it.totalWeight; feeTotal += it.weightedTotalFee;
     return '<tr class="border-b border-gray-100 hover:bg-gray-50">'
       + '<td class="px-2 py-2 text-right text-gray-400 select-none">' + (i + 1) + '</td>'
       + '<td class="px-3 py-2">' + Aoi.escapeHtml(it.type + ' - ' + it.model) + '</td>'
       + '<td class="px-3 py-2 text-right">' + it.quantity + '</td>'
       + '<td class="px-3 py-2"><input type="number" step="0.01" value="' + (it.unitWeight || '') + '" onchange="Aoi.intl.setWeight(\'' + it.key + '\', this.value)" class="w-20 border border-gray-300 rounded px-2 py-1 text-sm"></td>'
       + '<td class="px-3 py-2 text-right">' + it.totalWeight.toFixed(2) + '</td>'
-      + '<td class="px-3 py-2"><input type="number" step="0.01" value="' + (it.manual ? it.manualFee : it.avgIntlFee.toFixed(2)) + '" onchange="Aoi.intl.setFee(\'' + it.key + '\', this.value)" class="w-20 border border-gray-300 rounded px-2 py-1 text-sm"></td>'
+      + '<td class="px-3 py-2 text-right text-gray-400">' + it.avgIntlFee.toFixed(2) + '</td>'
+      + '<td class="px-3 py-2"><input type="number" step="0.01" value="' + it.weightedIntlFee.toFixed(2) + '" onchange="Aoi.intl.setFee(\'' + it.key + '\', this.value)" class="w-20 border border-gray-300 rounded px-2 py-1 text-sm">'
+      + (it.manual ? ' <button title="清除手动覆盖，恢复均价" onclick="Aoi.intl.resetFee(\'' + it.key + '\')" class="text-xs text-gray-400 hover:text-blue-600">↺</button>' : '')
+      + '</td>'
       + '<td class="px-3 py-2 text-right">' + it.weightedTotalFee.toFixed(2) + '</td>'
       + '</tr>';
   }).join('');
-  document.getElementById('intlStat').textContent = items.length
-    ? '共 ' + items.length + ' 种制品 · 总重量 ' + tareTotal.toFixed(2) + ' · 已分摊国际费 ' + feeTotal.toFixed(2)
-    : '该批次暂无订单';
+
+  var g = Aoi.intl.gaugeData(items, batch.targetAmount || 0);
+  g.targetAmount = batch.targetAmount || 0;
+  var stat = document.getElementById('intlStat');
+  if (stat) {
+    stat.textContent = items.length
+      ? '共 ' + items.length + ' 种制品 · 总重量 ' + g.tareTotal.toFixed(2)
+        + ' · 已分摊 ' + g.feeTotal.toFixed(2) + ' / 目标 ' + (batch.targetAmount || 0).toFixed(2)
+        + ' · 差值 ' + (g.diff >= 0 ? '+' : '') + g.diff.toFixed(2) + (g.diff >= 0 ? '（未分摊完）' : '（超出目标）')
+      : '该批次暂无订单';
+  }
+  Aoi.intl.renderGauge(g);
 
   var rows = Aoi.intl.buyerRows(batch.id, items);
   var btbody = document.getElementById('intlBuyerTbody');
@@ -130,6 +176,7 @@ Aoi.intl.clear = function () {
   var b = document.getElementById('intlBuyerTbody'); if (b) b.innerHTML = '';
   var s = document.getElementById('intlStat'); if (s) s.textContent = '';
   var tg = document.getElementById('intlTarget'); if (tg) tg.value = '';
+  var gauge = document.getElementById('intlGauge'); if (gauge) gauge.classList.add('hidden');
 };
 
 // 保存目标运费总额
@@ -185,6 +232,16 @@ Aoi.intl.setFee = async function (key, value) {
   batch.manualFees[key] = parseFloat(value) || 0;
   await Aoi.saveTeamData(Aoi.state.data);
   Aoi.intl.render();
+};
+
+// 清除手动覆盖，恢复按重量均价（v1.9.0）
+Aoi.intl.resetFee = async function (key) {
+  var batch = Aoi.intl.getBatch(document.getElementById('intlBatch').value);
+  if (!batch || !batch.manualFees) return;
+  delete batch.manualFees[key];
+  await Aoi.saveTeamData(Aoi.state.data);
+  Aoi.intl.render();
+  Aoi.toast('已恢复按重量均价', 'success');
 };
 
 // 保存某买家国内额外金额（写入交费记录，不重算分摊）

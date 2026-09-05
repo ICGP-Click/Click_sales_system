@@ -502,6 +502,36 @@
         </div>
       </div>
 
+      <!-- 活动购买人信息弹窗 -->
+      <div id="actBuyersModal" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg w-full max-w-xl p-6" onclick="event.stopPropagation()">
+          <h3 class="font-bold mb-1">购买人信息</h3>
+          <p id="actBuyersTitle" class="text-xs text-gray-400 mb-3"></p>
+          <div class="grid grid-cols-3 gap-2 text-xs text-gray-400 mb-1 px-1">
+            <span>购买人（圈名）</span><span>购买账号（邮箱）</span><span>送达地址</span>
+          </div>
+          <div id="actBuyerRows" class="grid gap-2 max-h-72 overflow-y-auto"></div>
+          <button onclick="Aoi.orders.addBuyerRow()" class="mt-2 px-3 py-1 border border-gray-300 rounded text-xs text-gray-600 hover:bg-gray-100">＋ 添加一行</button>
+          <div class="flex justify-end gap-3 mt-4">
+            <button onclick="Aoi.orders.closeActBuyers()" class="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-bold rounded hover:bg-gray-300">取消</button>
+            <button onclick="Aoi.orders.saveActBuyers()" class="px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded hover:bg-blue-700">保存</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 活动快递单号弹窗 -->
+      <div id="actTrackModal" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md p-6" onclick="event.stopPropagation()">
+          <h3 class="font-bold mb-1">快递单号</h3>
+          <p id="actTrackTitle" class="text-xs text-gray-400 mb-3">每行一个单号，可随时添加行数</p>
+          <textarea id="actTrackInput" rows="6" placeholder="每行一个快递单号" class="w-full border border-gray-300 rounded px-3 py-2 text-sm font-mono"></textarea>
+          <div class="flex justify-end gap-3 mt-4">
+            <button onclick="Aoi.orders.closeActTrack()" class="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-bold rounded hover:bg-gray-300">取消</button>
+            <button onclick="Aoi.orders.saveActTrack()" class="px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded hover:bg-blue-700">保存</button>
+          </div>
+        </div>
+      </div>
+
       <!-- 订单编辑弹窗 -->
       <div id="orderEditModal" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
         <div class="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md p-6" onclick="event.stopPropagation()">
@@ -545,12 +575,17 @@
                 <th class="px-3 py-2">所属 IP</th>
                 <th class="px-3 py-2">购买时间</th>
                 <th class="px-3 py-2">出货日期</th>
+                <th class="px-3 py-2">出货（模糊）</th>
                 <th class="px-3 py-2">平台链接</th>
                 <th class="px-3 py-2">进度</th>
+                <th class="px-3 py-2">购买人</th>
+                <th class="px-3 py-2">快递单号</th>
+                <th class="px-3 py-2">备注</th>
                 <th class="px-3 py-2"></th>
               </tr></thead>
               <tbody id="activityTbody"></tbody>
             </table>
+            <datalist id="shipFuzzyOptions"></datalist>
           </div>
         </div>
         <div class="bg-white rounded-lg border border-gray-200 p-6">
@@ -657,7 +692,7 @@
               <thead><tr class="text-left text-gray-500 border-b border-gray-200">
                 <th class="px-2 py-2 text-right w-8">行号</th><th class="px-3 py-2">制品</th><th class="px-3 py-2 text-right">数量</th>
                 <th class="px-3 py-2">单位重量</th><th class="px-3 py-2 text-right">总重量</th>
-                <th class="px-3 py-2">单位国际费</th><th class="px-3 py-2 text-right">总国际费</th>
+                <th class="px-3 py-2 text-right">均价（按重量）</th><th class="px-3 py-2">加权单价（可覆盖）</th><th class="px-3 py-2 text-right">总国际费</th>
               </tr></thead>
               <tbody id="intlTbody"></tbody>
             </table>
@@ -678,6 +713,18 @@
               </tr></thead>
               <tbody id="intlBuyerTbody"></tbody>
             </table>
+          </div>
+        </div>
+
+        <!-- 悬浮仪表盘：目标金额插值（可收起，滚动时常驻） -->
+        <div id="intlGauge" class="hidden fixed bottom-4 right-4 z-40 w-72 bg-white dark:bg-gray-800 border border-gray-200 rounded-lg shadow-lg p-3">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-bold text-gray-500">目标金额插值</span>
+            <button id="intlGaugeToggle" onclick="Aoi.intl.toggleGauge()" class="text-xs text-gray-400 hover:text-gray-600">收起</button>
+          </div>
+          <div id="intlGaugeBody">
+            <div class="h-2 bg-gray-100 rounded overflow-hidden mb-1"><div id="intlGaugeBar" class="h-full bg-blue-500 transition-all" style="width:0%"></div></div>
+            <div id="intlGaugeText" class="text-xs text-gray-600"></div>
           </div>
         </div>
       </div>
