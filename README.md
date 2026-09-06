@@ -2,7 +2,7 @@
 
 > **原作者：秋洛 (QiuLuo)** · 原项目：[mossasari/Group-Buy-Management-System](https://github.com/mossasari/Group-Buy-Management-System)
 > **当前维护者：郑 (zhengdaode)** · [GitHub](https://github.com/zhengdaode)
-> **当前版本：v2.0.0**（2026-09-06）· 变更记录见 [CHANGELOG.md](CHANGELOG.md)
+> **当前版本：v3.0.0**（2026-09-06）· 变更记录见 [CHANGELOG.md](CHANGELOG.md)
 
 [![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/zhengdaode/Aoi-system)
 
@@ -38,6 +38,7 @@
 ## 技术架构
 
 - **前端**：`index.html` + 16 个原生 JS 模块（全局 `window.Aoi` 命名空间），Tailwind CSS CDN。无框架、无构建。
+- **管理员体系（v3）**：部署时初始化超级管理员，应用内添加管理员（用户名/密码，bcrypt + token 会话）；不依赖 Supabase Auth，无自助注册。
 - **存储**：Supabase（PostgreSQL）三表 `teams` / `team_members` / `team_data`——全部业务数据存于 `team_data.data` 一个 JSONB blob；schema 与 RPC 见 [`supabase-schema.sql`](supabase-schema.sql)。
 - **QQ 机器人**：前端 `js/bot.js` → ECS 上的 [`relay/relay.js`](relay/relay.js)（校验登录态与 owner/admin 角色，NapCat 转发 ≥1s 节流）→ NapCat（OneBot v11）。token 只存服务端。
 - **部署**：Netlify / GitHub Pages 双通道，`scripts/build-config.js` 从环境变量注入 Supabase 密钥（不进仓库）。
@@ -53,17 +54,22 @@
 
 1. 克隆本仓库。
 2. 在 [Supabase](https://supabase.com/) 创建新项目。
-3. 在 Supabase **SQL Editor** 中运行仓库根目录的 **`supabase-schema.sql`**（三表 + RPC + RLS，设计为可安全重复执行）。
-
-   > ### ⚠️ 老库升级必读（v1.7.0 起）
-   >
-   > - 本项目当前 schema 为 `teams` / `team_members` / `team_data` 三表模型（旧版 `leader_data` 单表已废弃）。
-   > - **线上库必须重跑最新 `supabase-schema.sql`**——团员端两个 RPC（`get_team_by_member_key` / `update_team_data_by_member_key`）在 v1.7.0 修复了「保存静默丢失」缺陷（旧版只 update 不 insert，`team_data` 缺行时保存假成功），且函数签名有变（已改为 drop 后重建，重跑不会报错）。
-   > - 重跑后执行文件尾部的「排查 SQL」确认 RPC 存在且 anon 有执行权限；`select id, name, member_key from teams;` 确认团员密钥非空。
-
+3. 在 Supabase **SQL Editor** 中运行仓库根目录的 **`supabase-schema.sql`**（业务三表 + v3 管理员两表 + 全部 RPC + RLS，设计为可安全重复执行）。
 4. 提取 Supabase URL 和 ANON KEY；复制 `js/config.example.js` 为 `js/config.js` 填入（只用 anon key，禁止 service_role）。
 5. 部署整个项目文件夹到任意静态托管平台（推荐上方 Netlify 一键部署）。
-6. （可选）运行测试：`npm install && npm test`。
+6. **首次打开网站**：自动进入「初始化超级管理员」页，设置管理员的用户名与密码（此入口在创建第一个管理员后永久关闭）。
+7. 进入系统后，在「账号与设置」为其他管理人员添加独立的管理员账号/密码。
+8. （可选）运行测试：`npm install && npm test`。
+
+   > ### ⚠️ 老库升级必读
+   >
+   > - **v3.0.0 起管理员账号不再走 Supabase Auth 邮箱注册**：改为部署时初始化超管 + 应用内添加管理员（用户名/密码，bcrypt 哈希存 `admins` 表）。重跑最新 schema 后，首次打开网站会显示初始化页；旧邮箱账号自然失效，业务数据（`team_data` blob）不受影响。
+   > - **v1.7.0 修复**：团员端两个 RPC 曾存在「保存静默丢失」（只 update 不 insert）与「参数名二义性」缺陷，均已修复且签名有变（脚本自动 drop 重建，重跑不会报错）。
+   > - 重跑后执行文件尾部「排查 SQL」确认 RPC 就绪；忘记超管密码时，用 Supabase Dashboard → Authentication 删除后重初始化，或经 `scripts/sb.js` 重置。
+
+   > ### 🤖 让 agent 直接操作线上 Supabase（可选）
+   >
+   > 生成个人 Access Token（Dashboard → Account → Access Tokens），写入仓库根目录 `.env`：`SUPABASE_ACCESS_TOKEN=sbp_xxx`（已 gitignore）。之后 agent 可用 `node scripts/sb.js "SQL"` / `-f supabase-schema.sql` / `--check` 直接执行线上 SQL，无需人工复制粘贴。
 
 ### 部署后的 QQ 机器人接入
 
