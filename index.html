@@ -813,9 +813,9 @@
           <h3 class="font-bold mb-2">通知列表</h3>
           <div class="flex flex-wrap items-center gap-3 mb-3">
             <button onclick="Aoi.notify.copyAll()" class="px-4 py-2 bg-blue-500 text-white text-sm font-bold rounded hover:bg-blue-600">复制全部（未发）</button>
-            <button onclick="Aoi.notify.pushBot('group')" class="px-4 py-2 bg-indigo-500 text-white text-sm font-bold rounded hover:bg-indigo-600">推送·群发(@)</button>
-            <button onclick="Aoi.notify.pushBot('private')" class="px-4 py-2 bg-purple-600 text-white text-sm font-bold rounded hover:bg-purple-700">推送·私聊</button>
-            <button onclick="Aoi.notify.pushBot('all')" class="px-4 py-2 bg-indigo-300 text-gray-800 text-sm font-bold rounded hover:bg-indigo-400">推送·全部</button>
+            <button onclick="Aoi.notify.pushBot('all')" class="px-4 py-2 bg-indigo-500 text-white text-sm font-bold rounded hover:bg-indigo-600">推送·私聊+群@（推荐）</button>
+            <button onclick="Aoi.notify.pushBot('group')" class="px-4 py-2 bg-indigo-300 text-gray-800 text-sm font-bold rounded hover:bg-indigo-400">推送·仅群发(@)</button>
+            <button onclick="Aoi.notify.pushBot('private')" class="px-4 py-2 bg-purple-600 text-white text-sm font-bold rounded hover:bg-purple-700">推送·仅私聊</button>
             <button onclick="Aoi.notify.clearSent()" class="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-bold rounded hover:bg-gray-300">清除已发送</button>
           </div>
           <div class="overflow-x-auto">
