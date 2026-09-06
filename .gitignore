@@ -7,3 +7,4 @@ assessment-b-*.png
 js/config.js
 .env
 .zcode/
+backups/

@@ -11,6 +11,7 @@
   3. QQ 机器人：ECS 上重启 relay（`pm2 restart qq-relay`），设置页 relay 地址改为 **https://**。
 - **已知限制（未变）**：member_key 即全权凭证（blob 整份读写，v1.7.0 已加乐观锁缓解覆盖竞态）；地址/QQ 等 PII 仍随 blob 下发，商用前需拆表；默认图床 SSL 过期问题（P14）未处理。
 - **测试**：`tests/`（vitest + jsdom），harness 加载 index.html + js 模块；新增 js 模块需加入 `tests/helpers/aoi.js` 的 MODULES 列表。
+- **⚠️ 2026-09-06 数据事故记录**：生产站旧前端陈旧内存覆盖曾清空 cyberbutter 团 blob（orders 34→0），当日经备份还原至 32 条（**经与部署者确认为测试数据**）。取证结论：使用者真实数据 = 旧表 `leader_data` 中 `ICGPClick` 键 12 条订单（归属 2360690621@qq.com，已导出 `backups/`）；团员地址/QQ/凭证及 8/16 后录入的数据因当时保存缺陷从未落库，不可恢复。完整过程见 `docs/ITERATION_LOG.md` 第 6 轮。
 
 ## 项目定位
 

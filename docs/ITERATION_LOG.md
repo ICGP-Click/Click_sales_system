@@ -49,3 +49,32 @@ git reset --hard <tag|commit> # 整体回退到某状态（谨慎，会丢弃其
 ## 第 4 轮 · README 重写 + CONTRIBUTING 同步
 
 - **改动**：`README.md` 全量重写（产品概述 / 功能全景 / 架构 / 部署 / 团员侧升级 / 测试 / 结构 / QQ 机器人 / 安全）；`CONTRIBUTING.md` 项目结构章节同步 16 模块现状。
+
+---
+
+## 第 5 轮 · 线上 Supabase 升级与排障（与部署者实时协作）
+
+- **过程**：指导部署者在 SQL Editor 重跑 `supabase-schema.sql` → 触发并解决三个线上实际暴露的问题：
+  1. **SQL Editor "destructive" 警告**：源自 `drop function/policy if exists`，属预期，确认继续即可。
+  2. **老库重跑回滚风险**：`create policy` 不支持 IF NOT EXISTS，二次执行报 "policy already exists" 并整体回滚 → 为全部 7 条 RLS 策略补 `drop policy if exists` 守卫（commit `1a11bf3`），整文件自此真正可重复执行。
+  3. **42702 参数二义性（线上实测触发）**：`update_team_data_by_member_key` 的 plpgsql 参数 `member_key` 与列同名，裸引用报错（commit `af0c0c5`）。
+- **连带发现安全漏洞**：`get_team_by_member_key` 为 language sql，列名优先于参数名 → `where t.member_key = member_key` 恒为真，**任意密钥可读第一个团队**。两函数一并改为 plpgsql + `#variable_conflict use_variable`（参数名不变，前端无需改动）。
+- **验证 SQL 签名修正**：`has_function_privilege` 按签名精确匹配，写入 RPC 加第三参数后旧两参数检查报 42883（commit `f68f460`/`4983cfd`）。
+- **结果**：写入探针 `probe_written = true`，写入链路线上验证通过。
+
+## 第 6 轮 · 数据覆盖事故与取证（重要事故记录）
+
+- **事故**：2026-09-06 05:33，生产站（Netlify，仍为旧版前端）某个持有陈旧内存态的标签页触发整 blob 覆盖，`cyberbutter` 团数据被数周前旧快照覆盖——orders 34 → 0。这正是 v1.7.0 修复的"整 blob 覆盖竞态"在旧前端的现场复现。
+- **恢复**：部署者经备份表还原，orders 回到 32（09:28）；当前数据已双备份（线上快照表 `team_data_bak_20260906b` + 本地 `backups/team_data_snapshot.json`）。
+- **取证结论**（经 `scripts/sb.js` 全库穷举 + auth.users/leader_data 的 user_id 归属确认）：
+  - 注册账号共 4 个：owner（zhengxinyang@outlook.jp）、两名真实使用者（2360690621@qq.com、1214023897@qq.com，仅在 8/10-8/12 活跃于旧版系统）、一个当天注册未使用的账号。
+  - `leader_data`（旧版单表模型）数据归属铁证：`ICGPClick` 12 条 = 使用者 2360690621@qq.com 的**真实订单**（Zaboll/gamin 等，买日本/买中国两批次）；`123456+` 16 条 = owner 本人的测试数据；1214023897 的数据行为空（录入从未保存成功或未录入）。
+  - **不可恢复项**：团员端提交的收件地址/QQ 绑定/付款凭证（当时的保存缺陷导致从未落库）；8 月 16 日后录入的任何数据（blob 冻结证明写入全部失败）。免费版无备份/PITR，服务端无其他副本。
+- **教训（已固化为流程）**：① 生产与测试共用库 + 旧前端未更新即测试 = 事故配方，测试站必须独立 Supabase 项目或仅用 debug 账号；② 任何线上操作前先建快照表。
+
+## 第 7 轮 · v3 账号系统实施（已批准方案落地）
+
+- **提交**：`b536949`（schema：admins/admin_sessions + 14 个 admin_* RPC，已经 `scripts/sb.js` 应用于线上并验证）→ `33df5d3`（前端登录/初始化/管理员管理 + data.js token 读写 + relay 鉴权切换）→ `6cac3ee`（文档）。
+- **tag**：`v3.0.0`。
+- **状态**：代码与 schema 均已上线；等待部署者首次打开网站初始化超管，并重启 ECS relay（`pm2 restart qq-relay`）。
+- **测试**：75 用例全绿（新增 admin-auth 13 例，harness 补载 auth.js/team.js）。
