@@ -78,9 +78,9 @@ from pg_proc
 where pronamespace = 'public'::regnamespace
   and proname in ('get_team_by_member_key', 'update_team_data_by_member_key');
 
--- ② anon 角色是否有执行权限（两列都应为 true）
+-- ② anon 角色是否有执行权限（两列都应为 true；注意 update RPC 是三参数签名）
 select has_function_privilege('anon', 'public.get_team_by_member_key(text)', 'EXECUTE') as read_ok,
-       has_function_privilege('anon', 'public.update_team_data_by_member_key(text,jsonb)', 'EXECUTE') as write_ok;
+       has_function_privilege('anon', 'public.update_team_data_by_member_key(text,jsonb,timestamptz)', 'EXECUTE') as write_ok;
 
 -- ③ 团队密钥是否为 null、与测试输入是否一致
 select id, name, member_key from teams;
