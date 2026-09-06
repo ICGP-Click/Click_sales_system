@@ -12,7 +12,7 @@
      - ✅ ECS（47.101.194.103）`/root/relay/relay.js` 已更新为 v3 校验逻辑（systemd 服务 `qq-relay.service`，**不是 pm2**；`systemctl restart qq-relay`；旧版备份 `relay.js.bak-20260906`）。
      - ✅ https 入口（临时）：Cloudflare 快速隧道 `https://api-gsm-phenomenon-freely.trycloudflare.com` → ECS:8080（`nohup cloudflared tunnel --url http://localhost:8080`，ECS 重启后需重跑且 **URL 会变**）。设置页 relay 地址填它。持久方案待选：绑自有域名 / 连接 Netlify 仓库（netlify.toml 已备好 `/qqbot` 代理）/ Supabase Edge Function。
      - ✅ v3 前端已部署 GitHub Pages：https://icgp-click.github.io/Click_sales_system/ （deploy 分支曾停滞在 8-11 旧前端，已用 merge -s ours 对齐；Netlify 通道未连接，icgp-click-01 为空站）。
-     - ⬜ **NapCat 未登录**：容器在跑但 QQ 2364785311 停在扫码页（HTTP API 3000 未监听）。需打开 WebUI `http://47.101.194.103:6099`（token 见服务器 `/root/napcat/config/webui.json`）用小号扫码登录。
+     - ⬜ **NapCat 未登录**：容器在跑但 QQ 2364785311 停在扫码页（HTTP API 3000 未监听）。安全组未放行 6099，走临时隧道访问 WebUI 扫码：`https://sleeping-blanket-try-paintball.trycloudflare.com/webui?token=7001fa123d2e`（token 同服务器 `/root/napcat/config/webui.json`）。
      - ⬜ 用真实管理员账号（非 debug，debug 无管理员会话无法推送）在设置页保存 relay 地址后，通知页点群发验证。
      - 安全提醒：NapCat WebUI 6099 与隧道均对公网开放，验证完成后建议 6099 收紧为仅放行 8080。另：v3 主线不包含旧部署线的 P15 自定义背景 / P6 黑夜模式全局切换 / P16 图床 UI（保留在 `backup-before-cleanup` 分支与 deploy 分支历史，需要时可移植）。
 - **已知限制（未变）**：member_key 即全权凭证（blob 整份读写，v1.7.0 已加乐观锁缓解覆盖竞态）；地址/QQ 等 PII 仍随 blob 下发，商用前需拆表；默认图床 SSL 过期问题（P14）未处理。
