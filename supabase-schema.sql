@@ -234,11 +234,14 @@ end;
 $$;
 
 -- —— 排查 SQL（线上排障时在 SQL Editor 执行）——
--- ① RPC 是否存在：
---   select proname from pg_proc where pronamespace = 'public'::regnamespace
+-- ① RPC 是否存在（应返回 2 行；update 那行为三参数签名）：
+--   select proname, pg_get_function_arguments(oid)
+--   from pg_proc where pronamespace = 'public'::regnamespace
 --     and proname in ('get_team_by_member_key','update_team_data_by_member_key');
--- ② anon 是否有执行权限（应均为 true）：
---   select has_function_privilege('anon','public.get_team_by_member_key(text)','EXECUTE');
+-- ② anon 是否有执行权限（均应为 true；注意 has_function_privilege 按签名
+--    精确匹配，写入 RPC 必须用三参数签名，两参数会报 42883 does not exist）：
+--   select has_function_privilege('anon','public.get_team_by_member_key(text)','EXECUTE'),
+--          has_function_privilege('anon','public.update_team_data_by_member_key(text,jsonb,timestamptz)','EXECUTE');
 -- ③ 团队密钥是否为 null：select id, name, member_key from teams;
 
 -- =====================================================================
