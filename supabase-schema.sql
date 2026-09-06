@@ -249,12 +249,17 @@ alter table team_members enable row level security;
 alter table team_data enable row level security;
 
 -- teams：成员可读自己所在团队；owner 可更新（改名 / 邀请码由 RPC 负责）
+-- RLS 策略：drop if exists 后重建，保证本文件在老库上可安全重复执行
+-- （create policy 不支持 IF NOT EXISTS，不先 drop 会在二次执行时报
+--   "policy already exists" 并导致整个脚本回滚）
+drop policy if exists "teams_select_member" on teams;
 create policy "teams_select_member" on teams for select
   using (exists (
     select 1 from team_members m
     where m.team_id = teams.id and m.user_id = auth.uid()
   ));
 
+drop policy if exists "teams_update_owner" on teams;
 create policy "teams_update_owner" on teams for update
   using (owner_id = auth.uid())
   with check (owner_id = auth.uid());
@@ -276,9 +281,11 @@ begin
 end;
 $$;
 
+drop policy if exists "members_select" on team_members;
 create policy "members_select" on team_members for select
   using (public.is_team_member(team_members.team_id));
 
+drop policy if exists "members_delete_owner" on team_members;
 create policy "members_delete_owner" on team_members for delete
   using (exists (
     select 1 from teams t
@@ -286,18 +293,21 @@ create policy "members_delete_owner" on team_members for delete
   ));
 
 -- team_data：成员可读写本团队数据
+drop policy if exists "team_data_select" on team_data;
 create policy "team_data_select" on team_data for select
   using (exists (
     select 1 from team_members m
     where m.team_id = team_data.team_id and m.user_id = auth.uid()
   ));
 
+drop policy if exists "team_data_insert" on team_data;
 create policy "team_data_insert" on team_data for insert
   with check (exists (
     select 1 from team_members m
     where m.team_id = team_data.team_id and m.user_id = auth.uid()
   ));
 
+drop policy if exists "team_data_update" on team_data;
 create policy "team_data_update" on team_data for update
   using (exists (
     select 1 from team_members m
