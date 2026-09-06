@@ -1,110 +1,133 @@
-// Aoi-system — 认证：注册 / 登录 / 找回 / 改密 / 退出
+// Aoi-system — 认证（v3）：管理员用户名+密码自持凭据，脱离 Supabase Auth
+// 凭据链路：admin_login → 随机 token（localStorage 持久化）→ 所有读写 RPC 携带 token
+// 服务端：admins 表 bcrypt 哈希 + admin_sessions 表 sha256(token)（见 supabase-schema.sql v3 节）
 window.Aoi = window.Aoi || {};
 
 Aoi.auth = {};
 
-Aoi.auth.register = async function () {
-  var email = document.getElementById('regEmail').value.trim();
-  var pwd = document.getElementById('regPassword').value;
-  var pwd2 = document.getElementById('regConfirm').value;
-  if (!email || !pwd) { Aoi.toast('请填写邮箱和密码', 'warning'); return; }
-  if (pwd.length < 6) { Aoi.toast('密码至少 6 位', 'warning'); return; }
-  if (pwd !== pwd2) { Aoi.toast('两次密码不一致', 'warning'); return; }
+// —— 会话存取（localStorage: aoi_admin_session）——
+Aoi.adminSession = null;
+Aoi.adminUpdatedAt = null; // 团队数据版本（乐观锁）
 
-  Aoi.showLoading('注册中...');
-  var r = await Aoi.db.auth.signUp({
-    email: email,
-    password: pwd,
-    options: { emailRedirectTo: window.location.origin }
-  });
-  Aoi.hideLoading();
-  if (r.error) { Aoi.toast('注册失败：' + r.error.message, 'error'); return; }
-  Aoi.toast('注册成功，请去邮箱点击确认链接（可能在垃圾邮件）', 'success');
-  Aoi.showScreen('screen-auth');
+Aoi.adminLoadSession = function () {
+  if (!Aoi.adminSession) {
+    try { Aoi.adminSession = JSON.parse(localStorage.getItem('aoi_admin_session') || 'null'); } catch (e) { Aoi.adminSession = null; }
+    if (Aoi.adminSession && new Date(Aoi.adminSession.expiresAt) <= new Date()) Aoi.adminSession = null;
+  }
+  return Aoi.adminSession;
 };
 
-Aoi.auth.login = async function () {
-  var email = document.getElementById('loginEmail').value.trim();
-  var pwd = document.getElementById('loginPassword').value;
-  if (!email || !pwd) { Aoi.toast('请输入邮箱和密码', 'warning'); return; }
+Aoi.adminSaveSession = function (s) {
+  Aoi.adminSession = s;
+  localStorage.setItem('aoi_admin_session', JSON.stringify(s));
+};
 
-  // 调试账户：绕过 Supabase，数据走 localStorage
-  if (email === Aoi.DEBUG_EMAIL && pwd === Aoi.DEBUG_PWD) {
-    Aoi.state.user = { id: 'debug-local', email: Aoi.DEBUG_EMAIL, isDebug: true };
+Aoi.adminClearSession = function () {
+  Aoi.adminSession = null;
+  Aoi.adminUpdatedAt = null;
+  localStorage.removeItem('aoi_admin_session');
+};
+
+// RPC 错误中「会话过期」统一识别 → 清会话回登录页
+Aoi.auth.sessionError = function (msg) {
+  return /会话已过期/.test(msg || '');
+};
+
+// —— 登录 ——
+Aoi.auth.login = async function () {
+  var username = document.getElementById('loginUsername').value.trim();
+  var pwd = document.getElementById('loginPassword').value;
+  if (!username || !pwd) { Aoi.toast('请输入用户名和密码', 'warning'); return; }
+
+  // 调试账户：绕过服务端，数据走 localStorage
+  if (username === 'debug' && pwd === 'debug123') {
+    Aoi.state.user = { id: 'debug-local', username: 'debug', isDebug: true };
     await Aoi.enterApp();
     return;
   }
 
   Aoi.showLoading('登录中...');
-  var r = await Aoi.db.auth.signInWithPassword({ email: email, password: pwd });
+  var r = await Aoi.db.rpc('admin_login', { p_username: username, p_password: pwd });
   Aoi.hideLoading();
-  if (r.error) { Aoi.toast('登录失败：邮箱或密码错误', 'error'); return; }
-  Aoi.state.user = r.data.user;
+  if (r.error) { Aoi.toast(r.error.message || '登录失败', 'error'); return; }
+  Aoi.adminSaveSession(r.data);
+  Aoi.state.user = { id: r.data.username, username: r.data.username, role: r.data.role };
   await Aoi.enterApp();
 };
 
-Aoi.auth.sendReset = async function () {
-  var email = document.getElementById('forgotEmail').value.trim();
-  if (!email) { Aoi.toast('请输入注册邮箱', 'warning'); return; }
+// —— 首次部署：初始化超管（仅 admins 表为空时服务端放行）——
+Aoi.auth.bootstrap = async function () {
+  var username = document.getElementById('initUsername').value.trim();
+  var pwd = document.getElementById('initPassword').value;
+  var pwd2 = document.getElementById('initConfirm').value;
+  if (!username || !pwd) { Aoi.toast('请填写用户名和密码', 'warning'); return; }
+  if (pwd.length < 6) { Aoi.toast('密码至少 6 位', 'warning'); return; }
+  if (pwd !== pwd2) { Aoi.toast('两次密码不一致', 'warning'); return; }
 
-  Aoi.showLoading('发送中...');
-  var r = await Aoi.db.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+  Aoi.showLoading('初始化中...');
+  var r = await Aoi.db.rpc('admin_bootstrap', { p_username: username, p_password: pwd });
   Aoi.hideLoading();
-  if (r.error) { Aoi.toast('发送失败：' + r.error.message, 'error'); return; }
-  Aoi.toast('重置链接已发送，请查收邮箱', 'success');
-  Aoi.showScreen('screen-auth');
-};
-
-Aoi.auth.doReset = async function () {
-  var pwd = document.getElementById('resetPassword').value;
-  if (pwd.length < 6) { Aoi.toast('新密码至少 6 位', 'warning'); return; }
-
-  Aoi.showLoading('重置中...');
-  var r = await Aoi.db.auth.updateUser({ password: pwd });
-  Aoi.hideLoading();
-  if (r.error) { Aoi.toast('重置失败：' + r.error.message, 'error'); return; }
-  Aoi.toast('密码已重置', 'success');
-  var user = (await Aoi.db.auth.getUser()).data.user;
-  Aoi.state.user = user;
+  if (r.error) { Aoi.toast(r.error.message || '初始化失败', 'error'); return; }
+  Aoi.adminSaveSession(r.data);
+  Aoi.state.user = { id: r.data.username, username: r.data.username, role: r.data.role };
+  Aoi.toast('超级管理员已创建', 'success');
   await Aoi.enterApp();
 };
 
+// —— 修改自己的密码 ——
 Aoi.auth.changePassword = async function () {
   var pwd = document.getElementById('newPassword').value;
-  if (pwd.length < 6) { Aoi.toast('新密码至少 6 位', 'warning'); return; }
+  if (pwd.length < 6) { Aoi.toast('密码至少 6 位', 'warning'); return; }
+  var s = Aoi.adminLoadSession();
+  if (!s) { Aoi.toast('会话已过期，请重新登录', 'error'); return; }
 
   Aoi.showLoading('修改中...');
-  var r = await Aoi.db.auth.updateUser({ password: pwd });
+  var r = await Aoi.db.rpc('admin_change_password', { p_token: s.token, p_new_password: pwd });
   Aoi.hideLoading();
   if (r.error) { Aoi.toast('修改失败：' + r.error.message, 'error'); return; }
   Aoi.toast('密码已修改', 'success');
   document.getElementById('newPassword').value = '';
 };
 
+// —— 退出 ——
 Aoi.auth.logout = async function () {
-  await Aoi.db.auth.signOut();
+  var s = Aoi.adminLoadSession();
+  if (s && !(Aoi.state.user && Aoi.state.user.isDebug)) {
+    try { await Aoi.db.rpc('admin_logout', { p_token: s.token }); } catch (e) { /* 本地清理即可 */ }
+  }
+  Aoi.adminClearSession();
   Aoi.state.user = null;
   Aoi.state.team = null;
-  Aoi.state.members = [];
+  Aoi.state.role = null;
+  Aoi.state.data = {};
   Aoi.showScreen('screen-auth');
 };
 
-// 登录后进入应用：有团队 → 设置页；无团队 → 入驻页
+// 登录后进入应用：拉取团队信息 + 业务数据 blob
 Aoi.enterApp = async function () {
-  var info;
-  try {
-    info = await Aoi.loadTeam();
-  } catch (e) {
+  if (Aoi.state.user && Aoi.state.user.isDebug) {
+    Aoi.state.team = Aoi.debugTeam();
+    Aoi.state.role = 'super';
+    Aoi.state.data = JSON.parse(localStorage.getItem('aoi_debug_data') || '{}');
+  } else {
+    var s = Aoi.adminLoadSession();
+    if (!s) { Aoi.showScreen('screen-auth'); return; }
+    Aoi.showLoading('加载中...');
+    var r = await Aoi.db.rpc('admin_get_team_data', { p_token: s.token });
     Aoi.hideLoading();
-    Aoi.toast('加载团队失败：' + e.message, 'error');
-    Aoi.showScreen('screen-onboard');
-    return;
+    if (r.error || !r.data) {
+      var msg = (r.error && r.error.message) || '加载失败';
+      if (Aoi.auth.sessionError(msg)) { Aoi.adminClearSession(); Aoi.toast('会话已过期，请重新登录', 'error'); Aoi.showScreen('screen-auth'); return; }
+      Aoi.toast(msg, 'error');
+      Aoi.showScreen('screen-auth');
+      return;
+    }
+    Aoi.state.team = { name: r.data.name || '我的团', member_key: r.data.memberKey || '' };
+    Aoi.state.role = s.role;
+    Aoi.adminUpdatedAt = r.data.updatedAt || null;
+    Aoi.state.data = r.data.data || {};
   }
-  if (!info) { Aoi.showScreen('screen-onboard'); return; }
-  Aoi.state.team = info.team;
-  Aoi.state.role = info.role;
-  Aoi.state.members = info.members;
-  Aoi.state.data = await Aoi.getTeamData();
+
   Aoi.renderSettings();
   Aoi.announce.render();
   Aoi.orders.render();
@@ -129,17 +152,23 @@ Aoi.enterApp = async function () {
   Aoi.showScreen('screen-app');
 };
 
-// 监听密码找回回调
-Aoi.db.auth.onAuthStateChange(function (event) {
-  if (event === 'PASSWORD_RECOVERY') Aoi.showScreen('screen-reset');
-});
-
-// 启动：恢复会话
-Aoi.db.auth.getSession().then(function (res) {
-  if (res.data && res.data.session) {
-    Aoi.state.user = res.data.session.user;
-    Aoi.enterApp();
-  } else {
+// 启动：检查管理员是否已初始化 → 初始化页 / 登录页 / 恢复会话
+(async function () {
+  var session = Aoi.adminLoadSession();
+  if (session && !session.isDebug) {
+    Aoi.state.user = { id: session.username, username: session.username, role: session.role };
+    await Aoi.enterApp();
+    return;
+  }
+  if (session && session.isDebug) {
+    Aoi.state.user = { id: 'debug-local', username: 'debug', isDebug: true };
+    await Aoi.enterApp();
+    return;
+  }
+  try {
+    var r = await Aoi.db.rpc('admin_initialized');
+    Aoi.showScreen(r.data === false ? 'screen-init' : 'screen-auth');
+  } catch (e) {
     Aoi.showScreen('screen-auth');
   }
-});
+})();

@@ -37,29 +37,21 @@ if (!SUPABASE || !ANON_KEY || !NAPCAT_TOKEN) {
   process.exit(1);
 }
 
-// ① 验证 Supabase access token，返回 user.id；无效返回 null
-async function verifyUser(token) {
+// ① 鉴权（v3）：验证 admin token —— 调 Supabase RPC admin_verify_session，
+//    返回 {id, username, role} 或 null。role 限 super/admin。
+async function verifyAdmin(token) {
   if (!token) return null;
   try {
-    const r = await fetch(SUPABASE + '/auth/v1/user', {
-      headers: { Authorization: 'Bearer ' + token, apikey: ANON_KEY }
+    const r = await fetch(SUPABASE + '/rest/v1/rpc/admin_verify_session', {
+      method: 'POST',
+      headers: { apikey: ANON_KEY, Authorization: 'Bearer ' + ANON_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_token: token })
     });
     if (!r.ok) return null;
-    const u = await r.json();
-    return u.id || null;
+    const admin = await r.json();
+    if (!admin || (admin.role !== 'super' && admin.role !== 'admin')) return null;
+    return admin;
   } catch (e) { return null; }
-}
-
-// ② 校验是否 owner/admin（用用户自己的 JWT 走 RLS，无需 service_role）
-async function isAdmin(uid, token) {
-  try {
-    const r = await fetch(SUPABASE + '/rest/v1/team_members?user_id=eq.' + uid + '&select=role', {
-      headers: { apikey: ANON_KEY, Authorization: 'Bearer ' + token }
-    });
-    if (!r.ok) return false;
-    const rows = await r.json();
-    return rows.some(function (m) { return m.role === 'owner' || m.role === 'admin'; });
-  } catch (e) { return false; }
 }
 
 // ③ 转发 NapCat
@@ -105,9 +97,8 @@ http.createServer(async function (req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'method not allowed' });
 
   const token = (req.headers.authorization || '').replace('Bearer ', '');
-  const uid = await verifyUser(token);
-  if (!uid) return send(res, 401, { error: 'unauthorized' });
-  if (!(await isAdmin(uid, token))) return send(res, 403, { error: 'forbidden: not an admin' });
+  const admin = await verifyAdmin(token);
+  if (!admin) return send(res, 401, { error: 'unauthorized' });
 
   let body = '';
   req.on('data', function (c) { body += c; });

@@ -19,10 +19,10 @@ Aoi.bot.load = function () {
   Aoi.bot.config.groupId = d.botConfig.groupId || '';
 };
 
-// 当前 Supabase 会话 token（relay 鉴权用）；debug 模式无 token
+// 推送鉴权令牌（v3：admin token；relay 端经 admin_verify_session 校验）
 Aoi.bot.sessionToken = async function () {
-  var r = await Aoi.db.auth.getSession();
-  return (r.data && r.data.session && r.data.session.access_token) || '';
+  var s = Aoi.adminLoadSession();
+  return s ? s.token : '';
 };
 
 // 统一请求：POST relay，带 Supabase token；非 2xx 抛错

@@ -23,6 +23,8 @@ const w = dom.window;
 const MODULES = [
   'js/core.js',
   'js/data.js',
+  'js/auth.js',
+  'js/team.js',
   'js/orders.js',
   'js/calc.js',
   'js/intl.js',

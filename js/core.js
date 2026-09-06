@@ -2,8 +2,8 @@
 window.Aoi = window.Aoi || {};
 
 // 调试账户（免 Supabase，纯 localStorage 本地测试）
-Aoi.DEBUG_EMAIL = 'debug@aoi.local';
-Aoi.DEBUG_PWD = 'debug123';
+Aoi.DEBUG_USERNAME = 'debug';
+Aoi.DEBUG_PWD = 'debug123'; // 调试账户（数据仅存 localStorage）
 
 // 全局状态
 Aoi.state = {
@@ -11,7 +11,7 @@ Aoi.state = {
   team: null,    // 当前团队 { id, name, invite_code, ... }
   role: null,    // 当前用户角色 owner / admin
   members: [],   // 团队成员列表
-  data: {}       // 团队业务数据（订单/周边/活动等，loadTeam 后填充）
+  data: {}       // 团队业务数据（订单/周边/活动等，登录后填充）
 };
 
 // 生成唯一 ID
