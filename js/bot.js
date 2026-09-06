@@ -25,10 +25,19 @@ Aoi.bot.sessionToken = async function () {
   return s ? s.token : '';
 };
 
-// 统一请求：POST relay，带 Supabase token；非 2xx 抛错
+// 登录态类错误（401 / 会话失效）——批量私聊时据此中止，避免顶着坏会话打满全队列
+Aoi.bot.isAuthError = function (e) {
+  return /（401）|unauthorized|登录态/.test((e && e.message) || '');
+};
+
+// 统一请求：POST relay，带 admin token；非 2xx 抛错
 Aoi.bot.request = async function (payload) {
   if (!Aoi.bot.config.enabled || !Aoi.bot.config.relay) throw new Error('QQ 机器人未接入');
+  if (Aoi.state.user && Aoi.state.user.isDebug) {
+    throw new Error('debug 账号没有管理员会话，无法通过 relay 鉴权——请用真实管理员账号登录后再测试推送');
+  }
   var token = await Aoi.bot.sessionToken();
+  if (!token) throw new Error('管理员登录态缺失，请退出后重新登录再推送');
   var r = await fetch(Aoi.bot.config.relay, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
@@ -37,6 +46,9 @@ Aoi.bot.request = async function (payload) {
   if (!r.ok) {
     var text = '';
     try { text = await r.text(); } catch (e) { /* ignore */ }
+    if (r.status === 401) {
+      throw new Error('推送失败（401）：管理员会话已失效，请退出后重新登录再试；重新登录后仍 401 则检查 ECS relay 是否已更新到 v3 校验逻辑');
+    }
     throw new Error('推送失败（' + r.status + '）：' + text);
   }
   return r.json();
@@ -74,6 +86,8 @@ Aoi.bot.pushPrivate = async function (notifications) {
       sent++;
       sentIds.push(n.id);
     } catch (e) {
+      // 登录态失效（401）时逐条重试没有意义且徒增 relay/NapCat 压力，直接中止让上层提示
+      if (Aoi.bot.isAuthError(e)) throw e;
       failed++;
     }
   }

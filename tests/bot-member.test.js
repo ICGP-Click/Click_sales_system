@@ -11,6 +11,10 @@ function enableBot() {
   aoi.bot.config.groupId = '999';
 }
 
+// 原始实现引用：下方 describe 会把 sendPrivate/sendGroup 换成桩，之后需要恢复
+const realSendPrivate = aoi.bot.sendPrivate;
+const realSendGroup = aoi.bot.sendGroup;
+
 describe('Aoi.bot 私聊推送链路（v1.7.0 补上 sendPrivate 无调用方的缺口）', () => {
   beforeEach(() => {
     enableBot();
@@ -55,6 +59,55 @@ describe('Aoi.bot 私聊推送链路（v1.7.0 补上 sendPrivate 无调用方的
     expect(msg).toContain('[CQ:at,qq=111] 任意格式正文');
     expect(msg).toContain('无绑定正文'); // 未绑定的保持纯文本
     expect(msg).not.toContain('[CQ:at,qq=null]');
+  });
+});
+
+describe('Aoi.bot 请求鉴权与错误处理（v3 修复：debug 拦截 + 401 引导）', () => {
+  const SESSION = { token: 't'.repeat(64), role: 'super', username: 'boss', expiresAt: '2099-01-01T00:00:00Z' };
+
+  beforeEach(() => {
+    win.localStorage.clear();
+    delete win.fetch;
+    aoi.bot.sendPrivate = realSendPrivate;
+    aoi.bot.sendGroup = realSendGroup;
+    aoi.adminClearSession();
+    aoi.state.user = { id: 'boss', username: 'boss', role: 'super' };
+    aoi.state.data = { orders: [], memberMeta: {} };
+    aoi.bot.config.enabled = true;
+    aoi.bot.config.relay = 'https://relay.example.com';
+    aoi.bot.config.groupId = '999';
+  });
+
+  it('debug 账号直接拦截并给出明确提示（无管理员会话，relay 必然 401）', async () => {
+    aoi.state.user = { id: 'debug-local', username: 'debug', isDebug: true };
+    await expect(aoi.bot.pushAll([{ id: 'n1', buyer: '小樱', body: 'x' }])).rejects.toThrow(/debug 账号/);
+  });
+
+  it('无管理员会话时提示重新登录，而不是发空 token 撞 401', async () => {
+    await expect(aoi.bot.pushAll([{ id: 'n1', buyer: '小樱', body: 'x' }])).rejects.toThrow(/登录态缺失/);
+  });
+
+  it('relay 返回 401 时转为可操作的引导信息', async () => {
+    aoi.adminSaveSession(SESSION);
+    win.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401, text: async () => '{"error":"unauthorized"}' });
+    await expect(aoi.bot.pushAll([{ id: 'n1', buyer: '小樱', body: 'x' }])).rejects.toThrow(/（401）.*重新登录/);
+  });
+
+  it('pushPrivate 遇登录态失效立即中止（不顶着坏会话打满队列）', async () => {
+    aoi.adminSaveSession(SESSION);
+    aoi.state.data.memberMeta = { '小樱': { qq: '111' }, '小狼': { qq: '222' } };
+    aoi.bot.sendPrivate = vi.fn().mockRejectedValue(new Error('推送失败（401）：管理员会话已失效'));
+    await expect(aoi.bot.pushPrivate([
+      { id: 'n1', buyer: '小樱', body: 'a' },
+      { id: 'n2', buyer: '小狼', body: 'b' }
+    ])).rejects.toThrow(/401/);
+    expect(aoi.bot.sendPrivate).toHaveBeenCalledTimes(1);
+  });
+
+  it('isAuthError 识别 relay 原始 unauthorized 与包装后的 401', () => {
+    expect(aoi.bot.isAuthError(new Error('推送失败（401）：x'))).toBe(true);
+    expect(aoi.bot.isAuthError(new Error('unauthorized'))).toBe(true);
+    expect(aoi.bot.isAuthError(new Error('推送失败（502）'))).toBe(false);
   });
 });
 

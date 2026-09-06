@@ -8,7 +8,7 @@
 - **⚠️ 待线上操作（用户执行）**：
   1. 线上 Supabase **必须重跑 `supabase-schema.sql`**（团员端两个 RPC 已 drop 重建，含 upsert + 乐观锁修复）——不重跑则团员端问题 1 在线上依然存在；验证步骤见 README「老库升级必读」。
   2. 重新部署前端（Netlify / GitHub Pages）。
-  3. QQ 机器人：ECS 上重启 relay（`pm2 restart qq-relay`），设置页 relay 地址改为 **https://**。
+  3. QQ 机器人：ECS 上**先更新 `relay/relay.js` 文件到本仓库版本**（v3 校验逻辑：admin token → `admin_verify_session` RPC；旧版仍校验 Supabase JWT，会对新前端一律 401），再 `pm2 restart qq-relay`；`.env` 无需改动。设置页 relay 地址改为 **https://**（需 relay 前置 TLS 反代）。注意 debug 账号无管理员会话，无法测试推送，须用真实管理员账号验证。
 - **已知限制（未变）**：member_key 即全权凭证（blob 整份读写，v1.7.0 已加乐观锁缓解覆盖竞态）；地址/QQ 等 PII 仍随 blob 下发，商用前需拆表；默认图床 SSL 过期问题（P14）未处理。
 - **测试**：`tests/`（vitest + jsdom），harness 加载 index.html + js 模块；新增 js 模块需加入 `tests/helpers/aoi.js` 的 MODULES 列表。
 - **⚠️ 2026-09-06 数据事故记录**：生产站旧前端陈旧内存覆盖曾清空 cyberbutter 团 blob（orders 34→0），当日经备份还原至 32 条（**经与部署者确认为测试数据**）。取证结论：使用者真实数据 = 旧表 `leader_data` 中 `ICGPClick` 键 12 条订单（归属 2360690621@qq.com，已导出 `backups/`）；团员地址/QQ/凭证及 8/16 后录入的数据因当时保存缺陷从未落库，不可恢复。完整过程见 `docs/ITERATION_LOG.md` 第 6 轮。
