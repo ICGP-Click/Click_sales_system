@@ -8,7 +8,12 @@
 - **⚠️ 待线上操作（用户执行）**：
   1. 线上 Supabase **必须重跑 `supabase-schema.sql`**（团员端两个 RPC 已 drop 重建，含 upsert + 乐观锁修复）——不重跑则团员端问题 1 在线上依然存在；验证步骤见 README「老库升级必读」。
   2. 重新部署前端（Netlify / GitHub Pages）。
-  3. QQ 机器人：ECS 上**先更新 `relay/relay.js` 文件到本仓库版本**（v3 校验逻辑：admin token → `admin_verify_session` RPC；旧版仍校验 Supabase JWT，会对新前端一律 401），再 `pm2 restart qq-relay`；`.env` 无需改动。设置页 relay 地址改为 **https://**（需 relay 前置 TLS 反代）。注意 debug 账号无管理员会话，无法测试推送，须用真实管理员账号验证。
+  3. QQ 机器人（2026-09-06 晚已部署 relay v3，剩两步用户操作）：
+     - ✅ ECS（47.101.194.103）`/root/relay/relay.js` 已更新为 v3 校验逻辑（systemd 服务 `qq-relay.service`，**不是 pm2**；`systemctl restart qq-relay`；旧版备份 `relay.js.bak-20260906`）。
+     - ✅ Netlify 已加 `/qqbot` 反向代理（`netlify.toml`，服务端转发到 ECS:8080，规避 https 混合内容拦截）——设置页 relay 地址填 `https://icgp-click-01.netlify.app/qqbot`。
+     - ⬜ **NapCat 未登录**：容器在跑但 QQ 2364785311 停在扫码页（HTTP API 3000 未监听）。需打开 WebUI `http://47.101.194.103:6099`（token 见服务器 `/root/napcat/config/webui.json`）用小号扫码登录。
+     - ⬜ 用真实管理员账号（非 debug，debug 无管理员会话无法推送）在设置页保存 relay 地址后，通知页点群发验证。
+     - 安全提醒：NapCat WebUI 6099 目前对公网开放，登录完成后建议安全组收紧为仅放行 8080。
 - **已知限制（未变）**：member_key 即全权凭证（blob 整份读写，v1.7.0 已加乐观锁缓解覆盖竞态）；地址/QQ 等 PII 仍随 blob 下发，商用前需拆表；默认图床 SSL 过期问题（P14）未处理。
 - **测试**：`tests/`（vitest + jsdom），harness 加载 index.html + js 模块；新增 js 模块需加入 `tests/helpers/aoi.js` 的 MODULES 列表。
 - **⚠️ 2026-09-06 数据事故记录**：生产站旧前端陈旧内存覆盖曾清空 cyberbutter 团 blob（orders 34→0），当日经备份还原至 32 条（**经与部署者确认为测试数据**）。取证结论：使用者真实数据 = 旧表 `leader_data` 中 `ICGPClick` 键 12 条订单（归属 2360690621@qq.com，已导出 `backups/`）；团员地址/QQ/凭证及 8/16 后录入的数据因当时保存缺陷从未落库，不可恢复。完整过程见 `docs/ITERATION_LOG.md` 第 6 轮。

@@ -2,6 +2,14 @@
   command = "node scripts/build-config.js"
   publish = "."
 
+# QQ 机器人代理：浏览器只打同源 https 路径，由 Netlify 服务端转发到 ECS relay（http），
+# 规避 https 页面直接 fetch http 的混合内容拦截。必须放在 SPA catch-all 之前。
+[[redirects]]
+  from = "/qqbot"
+  to = "http://47.101.194.103:8080/"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
