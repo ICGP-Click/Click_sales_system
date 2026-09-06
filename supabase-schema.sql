@@ -169,24 +169,32 @@ $$;
 -- =====================================================================
 
 -- 按团员密钥读取团队名 + 业务数据 blob + 数据版本（匿名，无 auth.uid）
--- drop 再建：create or replace 无法变更返回结构，旧签名残留会导致重跑报错
+-- drop 再建：create or replace 无法变更返回结构，旧签名残留会导致重跑报错。
+-- 注意：用 plpgsql + #variable_conflict use_variable——若用 language sql，
+-- `where t.member_key = member_key` 的裸 member_key 会被解析成列名（列优先于参数），
+-- 恒为真导致任意密钥都能读到第一个团队（安全漏洞）。
 drop function if exists public.get_team_by_member_key(text);
 create function public.get_team_by_member_key(member_key text)
 returns json
-language sql
+language plpgsql
 security definer
 stable
 set search_path = public
 as $$
-  select json_build_object(
-    'name', t.name,
-    'data', coalesce(d.data, '{}'::jsonb),
-    'updatedAt', d.updated_at
-  )
-  from teams t
-  left join team_data d on d.team_id = t.id
-  where t.member_key = member_key
-  limit 1;
+#variable_conflict use_variable
+begin
+  return (
+    select json_build_object(
+      'name', t.name,
+      'data', coalesce(d.data, '{}'::jsonb),
+      'updatedAt', d.updated_at
+    )
+    from teams t
+    left join team_data d on d.team_id = t.id
+    where t.member_key = member_key
+    limit 1
+  );
+end;
 $$;
 
 -- 按团员密钥写入业务数据 blob（匿名，覆盖整份数据；密钥即授权）
@@ -196,7 +204,10 @@ $$;
 --   ② 可选乐观锁 expected_updated_at —— 与 team_data.updated_at 不一致时拒绝，
 --      防止整 blob 覆盖竞态（"改了又没了"）；
 --   ③ 返回写入后的 updated_at，供前端下次写入作为乐观锁版本。
+--   ④ plpgsql + #variable_conflict use_variable —— 裸 member_key 按参数解析，
+--      否则默认策略下与 teams.member_key 列同名产生 42702 二义性错误。
 drop function if exists public.update_team_data_by_member_key(text, jsonb);
+drop function if exists public.update_team_data_by_member_key(text, jsonb, timestamptz);
 create function public.update_team_data_by_member_key(
   member_key text,
   new_data jsonb,
@@ -207,6 +218,7 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+#variable_conflict use_variable
 declare
   target_team_id uuid;
   new_updated_at timestamptz;
