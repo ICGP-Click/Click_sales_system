@@ -49,7 +49,7 @@ describe('Aoi.bot 私聊推送链路（v1.7.0 补上 sendPrivate 无调用方的
     expect(r.sentIds).toEqual(['n2']);
   });
 
-  it('pushAll 群发消息按 buyer→qq 生成 CQ:at，不依赖 body 前缀', async () => {
+  it('pushAll 群发消息按 buyer→qq 生成 CQ:at，不依赖 body 前缀；未绑定的用圈名文字 @ 兜底', async () => {
     await aoi.bot.pushAll([
       { id: 'n1', buyer: '小樱', body: '任意格式正文' },
       { id: 'n3', buyer: '无绑定', body: '无绑定正文' }
@@ -57,7 +57,7 @@ describe('Aoi.bot 私聊推送链路（v1.7.0 补上 sendPrivate 无调用方的
     expect(aoi.bot.sendGroup).toHaveBeenCalledTimes(1);
     const msg = aoi.bot.sendGroup.mock.calls[0][0];
     expect(msg).toContain('[CQ:at,qq=111] 任意格式正文');
-    expect(msg).toContain('无绑定正文'); // 未绑定的保持纯文本
+    expect(msg).toContain('@无绑定 无绑定正文'); // 未绑定的用圈名文字 @（不触发 QQ 提醒）
     expect(msg).not.toContain('[CQ:at,qq=null]');
   });
 });

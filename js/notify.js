@@ -202,11 +202,14 @@ Aoi.notify.clearSent = async function () {
 Aoi.notify.pushBot = async function (mode) {
   mode = mode || 'all';
   var d = Aoi.notify.ensure();
-  var unsent = d.notifications.filter(function (n) { return !n.sent; });
-  if (!unsent.length) { Aoi.toast('没有未发送的通知', 'info'); return; }
+  // 收件地址更新（address）属管理员内部信息：仅显示在网页通知列表，不进任何 QQ 推送
+  var unsent = d.notifications.filter(function (n) { return !n.sent && n.type !== 'address'; });
+  var heldBack = d.notifications.filter(function (n) { return !n.sent && n.type === 'address'; }).length;
+  if (!unsent.length) { Aoi.toast(heldBack ? ('没有可推送的通知（' + heldBack + ' 条收件地址更新仅管理员可见）') : '没有未发送的通知', 'info'); return; }
   var markSent = function (ids) {
     d.notifications.forEach(function (n) { if (ids.indexOf(n.id) >= 0) n.sent = true; });
   };
+  var suffix = heldBack ? '；另有 ' + heldBack + ' 条收件地址更新仅管理员可见，未推送' : '';
   try {
     if (mode === 'all') {
       // ① 自动检测可私聊的人（memberMeta 绑定即视为可私聊），逐人尝试；单条失败只计数
@@ -226,7 +229,7 @@ Aoi.notify.pushBot = async function (mode) {
       if (p.sent) msg += '，私聊成功 ' + p.sent + ' 条';
       if (p.failed) msg += '，私聊失败 ' + p.failed + ' 条';
       if (p.unbound.length) msg += '；未绑定 QQ：' + p.unbound.join('、');
-      Aoi.toast(msg, p.failed || p.unbound.length ? 'warning' : 'success');
+      Aoi.toast(msg + suffix, p.failed || p.unbound.length ? 'warning' : 'success');
       return;
     }
     if (mode === 'private') {
@@ -237,7 +240,7 @@ Aoi.notify.pushBot = async function (mode) {
       var m = '私聊成功 ' + pr.sent + ' 条';
       if (pr.failed) m += '，失败 ' + pr.failed + ' 条';
       if (pr.unbound.length) m += '；未绑定 QQ（保持未发）：' + pr.unbound.join('、');
-      Aoi.toast(m, pr.failed || pr.unbound.length ? 'warning' : 'success');
+      Aoi.toast(m + suffix, pr.failed || pr.unbound.length ? 'warning' : 'success');
       return;
     }
     // group
@@ -245,7 +248,7 @@ Aoi.notify.pushBot = async function (mode) {
     markSent(unsent.map(function (n) { return n.id; }));
     await Aoi.saveTeamData(d);
     Aoi.notify.render();
-    Aoi.toast('已群发 ' + unsent.length + ' 条', 'success');
+    Aoi.toast('已群发 ' + unsent.length + ' 条' + suffix, 'success');
   } catch (e) {
     Aoi.toast(e.message || 'QQ 机器人未接入', 'warning');
   }

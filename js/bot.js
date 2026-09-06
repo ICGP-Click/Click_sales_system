@@ -94,7 +94,8 @@ Aoi.bot.pushPrivate = async function (notifications) {
   return { sent: sent, failed: failed, sentIds: sentIds, unbound: unbound };
 };
 
-// 群发（@ 每个已绑定 QQ 的人；@ 映射按 buyer→qq 查 memberMeta，不依赖 body 前缀格式）
+// 群发（@ 每个人：绑定 QQ 的用 CQ:at 真提及；未绑定的用圈名文字 @ 兜底——
+// 不触发 QQ 客户端提醒，但群成员能明确看到叫谁）
 Aoi.bot.pushAll = async function (notifications) {
   if (!Aoi.bot.config.enabled || !Aoi.bot.config.relay) throw new Error('QQ 机器人未接入');
   var d = Aoi.orders.ensure();
@@ -102,6 +103,7 @@ Aoi.bot.pushAll = async function (notifications) {
   var lines = notifications.map(function (n) {
     var qq = (n.buyer && meta[n.buyer]) ? meta[n.buyer].qq : null;
     if (qq) return '[CQ:at,qq=' + qq + '] ' + n.body;
+    if (n.buyer) return '@' + n.buyer + ' ' + n.body;
     return n.body;
   });
   await Aoi.bot.sendGroup(lines.join('\n'));

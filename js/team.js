@@ -117,7 +117,8 @@ Aoi.onRenameTeam = async function () {
 // 公告（手动发布/删除，展示给团员端）
 Aoi.announce = {};
 
-Aoi.announce.publish = async function () {
+// 发布公告。pushGroup 为 true 时同时把公告推送到 QQ 群（机器人未接入/失败不影响站内发布）
+Aoi.announce.publish = async function (pushGroup) {
   var ta = document.getElementById('announceInput');
   var text = ta.value.trim();
   if (!text) { Aoi.toast('请输入公告内容', 'warning'); return; }
@@ -127,7 +128,13 @@ Aoi.announce.publish = async function () {
   await Aoi.saveTeamData(d);
   ta.value = '';
   Aoi.announce.render();
-  Aoi.toast('公告已发布', 'success');
+  if (!pushGroup) { Aoi.toast('公告已发布', 'success'); return; }
+  try {
+    await Aoi.bot.sendGroup('【公告】' + text);
+    Aoi.toast('公告已发布并推送到 QQ 群', 'success');
+  } catch (e) {
+    Aoi.toast('公告已发布，但 QQ 群推送失败：' + (e.message || '未知错误'), 'warning');
+  }
 };
 
 Aoi.announce.render = function () {

@@ -797,6 +797,7 @@
           <p class="text-sm text-gray-500 mb-2">团员端首页可见（自动提醒 / QQ 机器人留到阶段 4b）</p>
           <textarea id="announceInput" rows="2" class="w-full border border-gray-300 rounded px-3 py-2 text-sm mb-2" placeholder="公告内容"></textarea>
           <button onclick="Aoi.announce.publish()" class="px-4 py-2 bg-blue-500 text-white text-sm font-bold rounded hover:bg-blue-600">发布</button>
+          <button onclick="Aoi.announce.publish(true)" class="px-4 py-2 bg-indigo-500 text-white text-sm font-bold rounded hover:bg-indigo-600">发布并推送 QQ 群</button>
           <ul id="announceList" class="mt-3"></ul>
         </div>
         <div class="bg-white rounded-lg border border-gray-200 p-6">
